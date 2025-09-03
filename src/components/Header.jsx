@@ -51,7 +51,7 @@ const Header = ({
           <Input
             ref={searchInputRef}
             type="text"
-            placeholder="搜索想法..."
+            placeholder="搜索想法/音樂..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
