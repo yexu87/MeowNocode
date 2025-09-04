@@ -516,8 +516,8 @@ import { toast } from 'sonner';
 
   // 统一筛选：标签 / 日期 / 搜索
   useEffect(() => {
-    // 1) 基础：仅按标签和日期过滤（作为回退列表）
-    let base = memos;
+    // 1) 基础：采用置顶 + 普通的并集，优先显示置顶（作为回退列表）
+    let base = [...pinnedMemos, ...memos];
 
     if (activeTag) {
       base = base.filter(memo => {
@@ -553,7 +553,7 @@ import { toast } from 'sonner';
 
     // 无关键词，直接使用 base
     setFilteredMemos(base);
-  }, [memos, activeTag, activeDate, searchQuery]);
+  }, [memos, pinnedMemos, activeTag, activeDate, searchQuery]);
 
   // 处理菜单操作
   const handleMenuAction = (e, memoId, action) => {
