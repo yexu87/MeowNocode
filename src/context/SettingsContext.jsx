@@ -4,6 +4,8 @@ import { D1DatabaseService } from '@/lib/d1';
 import { D1ApiClient } from '@/lib/d1-api';
 import { useAuth } from './AuthContext';
 import { getDeletedMemoTombstones, removeDeletedMemoTombstones } from '@/lib/utils';
+import largeFileStorage from '@/lib/largeFileStorage';
+import { toast } from 'sonner';
 
 const SettingsContext = createContext();
 
@@ -449,10 +451,75 @@ export function SettingsProvider({ children }) {
   }, [fontConfig]);
 
   useEffect(() => {
-    // 保存背景设置到localStorage
-    localStorage.setItem('backgroundConfig', JSON.stringify(backgroundConfig));
-  dispatchDataChanged({ part: 'background' });
+    // 保存背景设置到localStorage（避免将巨大 data URL 直接写入）
+    const persist = async () => {
+      try {
+        const cfg = backgroundConfig || {};
+        const isDataUrl = typeof cfg.imageUrl === 'string' && cfg.imageUrl.startsWith('data:');
+        const MAX_INLINE = 100_000; // ~100KB
+        const tooLarge = isDataUrl && cfg.imageUrl.length > MAX_INLINE;
+
+        let toSave = { ...cfg };
+
+        if (tooLarge) {
+          // 若无引用，先将 dataURL 存到 IndexedDB
+          if (!toSave.imageRef || !toSave.imageRef.id) {
+            try {
+              const match = /^data:(.*?);base64,(.*)$/.exec(cfg.imageUrl || '');
+              const mime = match ? (match[1] || 'image/png') : 'image/png';
+              const base64Part = match ? match[2] : '';
+              const approxSize = Math.floor(((cfg.imageUrl.length - (cfg.imageUrl.indexOf(',') + 1)) * 3) / 4);
+              const stored = await largeFileStorage.storeFile({
+                name: 'background-image',
+                size: approxSize,
+                type: mime,
+                data: `data:${mime};base64,${base64Part}`,
+              });
+              toSave.imageRef = { id: stored.id, type: mime, storedAt: new Date().toISOString() };
+            } catch (e) {
+              console.warn('Store background image to IndexedDB failed:', e);
+            }
+          }
+          // 避免写入巨大字符串
+          toSave.imageUrl = '';
+        }
+
+        try {
+          localStorage.setItem('backgroundConfig', JSON.stringify(toSave));
+        } catch (err) {
+          if (err && String(err.name || err).includes('QuotaExceededError')) {
+            try {
+              const minimal = { ...toSave, imageUrl: '' };
+              localStorage.setItem('backgroundConfig', JSON.stringify(minimal));
+              toast.error('本地存储空间不足，已停止缓存大图。建议使用外链或随机背景。');
+            } catch {}
+          } else {
+            throw err;
+          }
+        }
+      } finally {
+        dispatchDataChanged({ part: 'background' });
+      }
+    };
+    try { persist(); } catch {}
   }, [backgroundConfig]);
+
+  // 如存在 IndexedDB 引用且 imageUrl 为空，则尝试在内存中恢复图片数据（不写回 localStorage）
+  useEffect(() => {
+    const recover = async () => {
+      try {
+        const ref = backgroundConfig?.imageRef;
+        if (!ref || backgroundConfig?.imageUrl) return;
+        const file = await largeFileStorage.getFile(ref.id);
+        if (file && file.data) {
+          setBackgroundConfig(prev => ({ ...prev, imageUrl: file.data }));
+        }
+      } catch (e) {
+        console.warn('Recover background image failed:', e);
+      }
+    };
+    try { recover(); } catch {}
+  }, [backgroundConfig?.imageRef, backgroundConfig?.imageUrl]);
 
   useEffect(() => {
     // 保存头像设置到localStorage

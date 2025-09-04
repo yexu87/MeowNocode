@@ -44,12 +44,10 @@ const ImageUpload = ({ value, onChange, onClear, className = '', uploadType = 'i
     };
 
     const fallbackToBase64 = () => {
-      // 创建本地URL并转 Base64 作为回退
+      // 仅转为 dataURL 返回，不再写入 localStorage，避免配额问题
       const reader = new FileReader();
       reader.onload = (e) => {
         const base64 = e.target.result;
-        const cacheKey = `img_${uploadType}_${Date.now()}`;
-        try { localStorage.setItem(cacheKey, base64); } catch {}
         onChange(base64);
       };
       reader.readAsDataURL(file);
