@@ -1,7 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Clock, MoreVertical, ArrowUp, Send, X, Share2, Image } from 'lucide-react';
+import { Clock, MoreVertical, ArrowUp, X, Image } from 'lucide-react';
 import MemoEditor from '@/components/MemoEditor';
 import ContentRenderer from '@/components/ContentRenderer';
 import { useTheme } from '@/context/ThemeContext';
@@ -35,6 +34,7 @@ const MemoList = ({
 }) => {
   const { themeColor } = useTheme();
   const memosForBacklinks = (allMemos && allMemos.length) ? allMemos : [...pinnedMemos, ...memos];
+  const editingWrapperRef = useRef(null);
 
   // 处理菜单定位
   useEffect(() => {
@@ -78,6 +78,27 @@ const MemoList = ({
       };
     }
   }, [activeMenuId]);
+
+  // 当列表中有正在编辑的 memo 时，点击编辑器外自动保存并退出编辑
+  useEffect(() => {
+    if (!editingId) return;
+    const handleOutside = (e) => {
+      const el = editingWrapperRef.current;
+      if (!el) return;
+      const target = e.target;
+      if (el.contains(target)) return; // 点击在编辑器内，忽略
+      // 在编辑器外点击，自动保存并退出
+      try {
+        onSaveEdit?.(editingId);
+      } catch {}
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [editingId, onSaveEdit]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -240,7 +261,7 @@ const MemoList = ({
                     </div>
                     
         {editingId === memo.id ? (
-                      <div className="mb-4">
+                      <div className="mb-4" ref={editingWrapperRef}>
                         <div className="relative">
                           <MemoEditor
                             value={editContent}
@@ -250,30 +271,13 @@ const MemoList = ({
                             showCharCount={true}
                             autoFocus={true}
                             memosList={memosForBacklinks}
-          currentMemoId={memo.id}
-          backlinks={Array.isArray(memo.backlinks) ? memo.backlinks : []}
-          onAddBacklink={onAddBacklink}
-          onPreviewMemo={onPreviewMemo}
+                            currentMemoId={memo.id}
+                            backlinks={Array.isArray(memo.backlinks) ? memo.backlinks : []}
+                            onAddBacklink={onAddBacklink}
+                            onPreviewMemo={onPreviewMemo}
                             onRemoveBacklink={onRemoveBacklink}
+                            onSubmit={() => onSaveEdit(memo.id)}
                           />
-                          <div className="absolute bottom-12 right-2 flex items-center space-x-1 sm:space-x-2">
-                            <Button
-                              variant="outline"
-                              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                              onClick={onCancelEdit}
-                              className="bg-white hover:bg-gray-50 text-gray-700 border-gray-300 px-2 py-1 sm:px-3 sm:py-2 text-sm"
-                            >
-                              取消
-                            </Button>
-                            <Button
-                              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                              onClick={() => onSaveEdit(memo.id)}
-                              disabled={!editContent.trim()}
-                              className="bg-slate-600 hover:bg-slate-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-2 py-1 sm:px-3 sm:py-2 text-sm"
-                            >
-                              <Send className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                          </div>
                         </div>
                       </div>
                     ) : (

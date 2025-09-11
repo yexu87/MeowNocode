@@ -237,7 +237,16 @@ const MemoEditor = ({
 
   const handleBlur = () => {
     setIsFocused(false);
+    // 失焦时关闭双链选择器
+    setShowBacklinkPicker(false);
     onBlur?.();
+  };
+
+  // 在编辑器聚焦时，点击编辑器区域任意位置（不含双链按钮/选择器）关闭选择器
+  const handleContainerMouseDown = () => {
+    if (showBacklinkPicker) {
+      setShowBacklinkPicker(false);
+    }
   };
 
   // 当value变化时调整高度
@@ -273,7 +282,7 @@ const MemoEditor = ({
   return (
     <div
       className={cn(
-        "relative border rounded-lg bg-white dark:bg-gray-800 transition-all duration-200",
+        "relative border rounded-lg overflow-hidden bg-white dark:bg-gray-800 transition-all duration-200",
         isFocused
           ? "ring-2 shadow-sm"
           : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600",
@@ -284,6 +293,7 @@ const MemoEditor = ({
         borderColor: themeColor,
         '--tw-ring-color': themeColor
       } : {}}
+      onMouseDown={handleContainerMouseDown}
     >
       {/* 主要文本区域 */}
       <textarea
@@ -344,7 +354,7 @@ const MemoEditor = ({
 
       {/* 底部信息栏 */}
       {(showCharCount || onSubmit) && (
-        <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 min-h-[32px]">
+        <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 min-h-[32px] rounded-b-lg">
           {/* 未聚焦时显示一言 */}
           {!isFocused && hitokotoConfig.enabled ? (
             <a
@@ -381,7 +391,7 @@ const MemoEditor = ({
                 {/* Spoiler 快捷按钮 */}
                 <button
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); insertSpoilerAtCursor(); }}
+                  onMouseDown={(e) => { e.preventDefault(); /* 允许冒泡以便父容器关闭选择器 */ insertSpoilerAtCursor(); }}
                   className="inline-flex items-center justify-center h-7 w-7 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
                 >
                   {/* 模糊的小圆角矩形图标（默认模糊效果） */}
