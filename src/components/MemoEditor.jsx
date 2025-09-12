@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
 import { useSettings } from '@/context/SettingsContext';
 import { EMOJI_CATEGORIES, loadEmojiItems, buildEmojiUrl } from '@/config/emoji';
+import { getEmojiCategory } from '@/config/emoji';
 
 const MemoEditor = ({
   value = '',
@@ -208,6 +209,54 @@ const MemoEditor = ({
     insertSnippetAtCursor(snippet, snippet.length);
   };
 
+  // Render inline text with :cat_name: emoji shortcodes as <img> nodes
+  const renderInlineWithEmoji = (text) => {
+    if (!text) return null;
+    const EMOJI_RE = /:([a-z0-9]+)_([a-z0-9_\-]+):/gi;
+    const nodes = [];
+    let lastIndex = 0;
+    let m;
+    let k = 0;
+    while ((m = EMOJI_RE.exec(text)) !== null) {
+      if (m.index > lastIndex) {
+        nodes.push(text.slice(lastIndex, m.index));
+      }
+      const cat = (m[1] || '').toLowerCase();
+      const name = (m[2] || '').toLowerCase();
+      if (getEmojiCategory(cat)) {
+        const url = buildEmojiUrl(cat, name, 'png');
+        nodes.push(
+          <img
+            key={`emoji-${k++}-${cat}-${name}`}
+            src={url}
+            alt={`emoji:${cat}_${name}`}
+            className="inline-block transition-transform duration-150 ease-out"
+            style={{ height: '1em', width: 'auto', objectFit: 'contain', verticalAlign: '-0.2em', margin: '0 0.05em' }}
+            loading="lazy"
+            onError={(e) => {
+              const order = ['png', 'webp', 'gif'];
+              const curExt = (e.currentTarget.src.match(/\.(\w+)(?:\?|#|$)/) || [,''])[1];
+              const rest = order.filter(x => x !== curExt);
+              for (const ext of rest) {
+                const candidate = buildEmojiUrl(cat, name, ext);
+                if (e.currentTarget.src !== candidate) {
+                  e.currentTarget.src = candidate;
+                  return;
+                }
+              }
+            }}
+          />
+        );
+      } else {
+        nodes.push(m[0]);
+      }
+      lastIndex = m.index + m[0].length;
+    }
+    const rest = text.slice(lastIndex);
+    if (rest) nodes.push(rest);
+    return nodes;
+  };
+
   const ensureEmojiCategoryLoaded = async (categoryKey) => {
     if ((emojiMap[categoryKey] || []).length > 0) return;
     const items = await loadEmojiItems(categoryKey);
@@ -393,7 +442,9 @@ const MemoEditor = ({
                 onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onPreviewMemo?.(m.id); }}
                 className="max-w-full inline-flex items-center gap-1 pl-2 pr-2 py-0.5 rounded-md bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 text-xs hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                <span className="truncate inline-block max-w-[180px]">{m.content?.replace(/\n/g, ' ').slice(0, 50) || '暂无内容'}</span>
+                <span className="truncate inline-flex items-center max-w-[180px]">
+                  {renderInlineWithEmoji(m.content?.replace(/\n/g, ' ').slice(0, 50) || '暂无内容')}
+                </span>
                 <ArrowUpRight className="h-3.5 w-3.5 opacity-70" />
               </button>
               <button
@@ -466,7 +517,16 @@ const MemoEditor = ({
                 <button
                   type="button"
                   ref={backlinkBtnRef}
-                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setShowBacklinkPicker(v => !v); }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const willShow = !showBacklinkPicker;
+                    setShowBacklinkPicker(willShow);
+                    if (willShow) {
+                      setShowEmojiPicker(false);
+                      updatePickerPosition();
+                    }
+                  }}
                   className={cn(
                     "inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
                   )}
@@ -488,6 +548,7 @@ const MemoEditor = ({
                     const willShow = !showEmojiPicker;
                     setShowEmojiPicker(willShow);
                     if (willShow) {
+                      setShowBacklinkPicker(false);
                       updateEmojiPickerPosition();
                       await ensureEmojiCategoryLoaded(activeEmojiCategory);
                     }
@@ -525,7 +586,9 @@ const MemoEditor = ({
                           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handlePickBacklink(m.id); }}
                              
                         >
-                          <div className="truncate">{m.content?.replace(/\n/g, ' ') || '暂无内容'}</div>
+                          <div className="truncate whitespace-nowrap overflow-hidden text-ellipsis">
+                            {renderInlineWithEmoji((m.content?.replace(/\n/g, ' ') || '暂无内容'))}
+                          </div>
                           <div className="text-[11px] text-gray-400 mt-0.5">{new Date(m.updatedAt || m.createdAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric' })}</div>
                         </button>
                       ))}
@@ -582,7 +645,7 @@ const MemoEditor = ({
                               return (
                                 <button
                                   key={`emoji-${activeEmojiCategory}-${name}`}
-                                  className="w-9 h-9 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
+                                  className="group w-9 h-9 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
                                   title={name}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
@@ -594,7 +657,7 @@ const MemoEditor = ({
                                   <img
                                     src={url}
                                     alt={`emoji:${activeEmojiCategory}_${name}`}
-                                    className="inline-block"
+                                    className="inline-block transform-gpu transition-transform duration-150 ease-out group-hover:scale-125"
                                     style={{ height: '1.2em', width: 'auto', objectFit: 'contain', verticalAlign: '-0.2em' }}
                                     loading="lazy"
                                   />
