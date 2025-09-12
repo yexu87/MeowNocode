@@ -52,6 +52,7 @@ import { toast } from 'sonner';
   const [previewMemoId, setPreviewMemoId] = useState(null);
   const [pendingNewBacklinks, setPendingNewBacklinks] = useState([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [pendingNewAudioClips, setPendingNewAudioClips] = useState([]);
   // 音乐搜索卡片
   const [musicSearchOpen, setMusicSearchOpen] = useState(false);
   const [musicSearchKeyword, setMusicSearchKeyword] = useState('');
@@ -244,7 +245,7 @@ import { toast } from 'sonner';
       }
     } catch {}
     
-  if (savedMemos) {
+    if (savedMemos) {
       try {
         const parsedMemos = JSON.parse(savedMemos);
         const normalizedMemos = parsedMemos.map(memo => ({
@@ -256,6 +257,7 @@ import { toast } from 'sonner';
           createdAt: memo.createdAt || memo.timestamp || new Date().toISOString(),
       updatedAt: memo.updatedAt || memo.lastModified || new Date().toISOString(),
       backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
+      audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
       // 画布位置：优先使用 memo 自身保存的，退回到 canvasState.memoPositions
       canvasX: (typeof memo.canvasX === 'number' ? memo.canvasX : (memoPositions[memo.id]?.x)),
       canvasY: (typeof memo.canvasY === 'number' ? memo.canvasY : (memoPositions[memo.id]?.y))
@@ -343,6 +345,7 @@ import { toast } from 'sonner';
             createdAt: memo.createdAt || memo.timestamp || new Date().toISOString(),
             updatedAt: memo.updatedAt || memo.lastModified || new Date().toISOString(),
             backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
+            audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
             canvasX: (typeof memo.canvasX === 'number' ? memo.canvasX : (memoPositions[memo.id]?.x)),
             canvasY: (typeof memo.canvasY === 'number' ? memo.canvasY : (memoPositions[memo.id]?.y))
           }));
@@ -466,7 +469,8 @@ import { toast } from 'sonner';
       updatedAt: nowIso,
       timestamp: nowIso,
       lastModified: nowIso,
-      backlinks: Array.isArray(pendingNewBacklinks) ? pendingNewBacklinks : []
+      backlinks: Array.isArray(pendingNewBacklinks) ? pendingNewBacklinks : [],
+      audioClips: Array.isArray(pendingNewAudioClips) ? pendingNewAudioClips : []
     };
 
     // 更新现有 memos 与 pinnedMemos，将新 memoId 写入被选目标的 backlinks（双向）
@@ -482,6 +486,7 @@ import { toast } from 'sonner';
     setPinnedMemos(updatedPinned);
     setNewMemo('');
     setPendingNewBacklinks([]);
+    setPendingNewAudioClips([]);
   };
 
   // 更新热力图数据
@@ -696,6 +701,39 @@ import { toast } from 'sonner';
     });
     setMemos(prev => prune(prev));
     setPinnedMemos(prev => prune(prev));
+  };
+
+  // 移除录音：fromId 为空表示新建 memo（移除待提交列表），否则从对应 memo 中移除下标 idx
+  const handleRemoveAudioClip = (fromId, idx) => {
+    if (typeof idx !== 'number') return;
+    if (!fromId) {
+      setPendingNewAudioClips((prev) => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    const removeFrom = (list) => list.map((m) => {
+      if (m.id !== fromId) return m;
+      const clips = Array.isArray(m.audioClips) ? m.audioClips : [];
+      const nextClips = clips.filter((_, i) => i !== idx);
+      return { ...m, audioClips: nextClips, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
+    });
+    setMemos((prev) => removeFrom(prev));
+    setPinnedMemos((prev) => removeFrom(prev));
+  };
+
+  // 添加录音到某条 memo；fromId 为空表示当前是“新建 memo”编辑器，加入待提交列表
+  const handleAddAudioClip = (fromId, clip) => {
+    if (!clip) return;
+    if (!fromId) {
+      setPendingNewAudioClips(prev => [...prev, clip]);
+      return;
+    }
+    const addTo = (list) => list.map(m => {
+      if (m.id !== fromId) return m;
+      const prev = Array.isArray(m.audioClips) ? m.audioClips : [];
+      return { ...m, audioClips: [...prev, clip], updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
+    });
+    setMemos(prev => addTo(prev));
+    setPinnedMemos(prev => addTo(prev));
   };
 
   // 预览某条 memo
@@ -1319,6 +1357,10 @@ import { toast } from 'sonner';
             onPreviewMemo={handlePreviewMemo}
             pendingNewBacklinks={pendingNewBacklinks}
             onRemoveBacklink={handleRemoveBacklink}
+            // audio props
+            pendingNewAudioClips={pendingNewAudioClips}
+            onRemoveAudioClip={handleRemoveAudioClip}
+            onAddAudioClip={handleAddAudioClip}
               onOpenMusic={() => {
                 if (musicConfig?.enabled) setMusicModal((m) => ({ ...m, isOpen: true }));
               }}

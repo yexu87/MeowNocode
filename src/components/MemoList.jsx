@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Clock, MoreVertical, ArrowUp, X, Image } from 'lucide-react';
 import MemoEditor from '@/components/MemoEditor';
 import ContentRenderer from '@/components/ContentRenderer';
 import { useTheme } from '@/context/ThemeContext';
+import fileStorageService from '@/lib/fileStorageService';
 
 const MemoList = ({ 
   memos, 
@@ -31,10 +32,53 @@ const MemoList = ({
   onAddBacklink,
   onPreviewMemo,
   onRemoveBacklink
+  ,
+  onAddAudioClip,
+  onRemoveAudioClip
 }) => {
   const { themeColor } = useTheme();
   const memosForBacklinks = (allMemos && allMemos.length) ? allMemos : [...pinnedMemos, ...memos];
   const editingWrapperRef = useRef(null);
+  const [audioUrls, setAudioUrls] = useState({});
+  const audioRefs = useRef({});
+  const [playing, setPlaying] = useState({});
+
+  const formatMs = (ms) => {
+    if (!ms && ms !== 0) return '';
+    const sec = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Resolve audio urls for clips stored in indexeddb/base64
+  useEffect(() => {
+    const resolveAll = async () => {
+      const next = { ...audioUrls };
+      const lists = [memos, pinnedMemos];
+      for (const list of lists) {
+        for (const memo of list) {
+          const clips = Array.isArray(memo.audioClips) ? memo.audioClips : [];
+          for (let i = 0; i < clips.length; i++) {
+            const clip = clips[i];
+            const key = `${memo.id}:${i}`;
+            if (next[key]) continue;
+            if (clip && clip.url) { next[key] = clip.url; continue; }
+            if (clip && clip.storageType === 'base64' && clip.data) { next[key] = clip.data; continue; }
+            if (clip && clip.storageType === 'indexeddb' && clip.id) {
+              try {
+                const restored = await fileStorageService.restoreFile(clip);
+                if (restored && restored.data) next[key] = restored.data;
+              } catch {}
+            }
+          }
+        }
+      }
+      setAudioUrls(next);
+    };
+    resolveAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memos, pinnedMemos]);
 
   // 处理菜单定位
   useEffect(() => {
@@ -276,6 +320,9 @@ const MemoList = ({
                             onAddBacklink={onAddBacklink}
                             onPreviewMemo={onPreviewMemo}
                             onRemoveBacklink={onRemoveBacklink}
+                            audioClips={Array.isArray(memo.audioClips) ? memo.audioClips : []}
+                            onRemoveAudioClip={onRemoveAudioClip}
+                            onAddAudioClip={onAddAudioClip}
                             onSubmit={() => onSaveEdit(memo.id)}
                           />
                         </div>
@@ -317,6 +364,44 @@ const MemoList = ({
                               >
                                 ×
                               </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* 音频录音（展示在每条 memo 底部，芯片风格） */}
+                    {Array.isArray(memo.audioClips) && memo.audioClips.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {memo.audioClips.map((clip, idx) => {
+                          const key = `${memo.id}:${idx}`;
+                          const src = clip?.url || clip?.data || audioUrls[key] || '';
+                          const isPlaying = !!playing[key];
+                          return (
+                            <span key={key} className="inline-flex items-center group">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); const el = audioRefs.current[key]; if (!el) return; if (el.paused) { el.play(); setPlaying(p=>({...p,[key]:true})); } else { el.pause(); setPlaying(p=>({...p,[key]:false})); } }}
+                                className="max-w-full inline-flex items-center gap-1 pl-2 pr-2 py-0.5 rounded-md bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 text-xs hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                title="播放录音"
+                              >
+                                {isPlaying ? (
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                                    <path d="M8 6h3v12H8zM13 6h3v12h-3z" fill="currentColor" />
+                                  </svg>
+                                ) : (
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                                    <path d="M8 5l12 7-12 7V5z" fill="currentColor" />
+                                  </svg>
+                                )}
+                                <span className="truncate inline-block max-w-[200px]">录音{clip?.durationMs ? ` · ${formatMs(clip.durationMs)}` : ''}</span>
+                              </button>
+                              <audio
+                                ref={(el) => { if (el) audioRefs.current[key] = el; }}
+                                src={src}
+                                style={{ display: 'none' }}
+                                onEnded={() => setPlaying((p) => ({ ...p, [key]: false }))}
+                              />
                             </span>
                           );
                         })}

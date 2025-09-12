@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS memos (
   content TEXT NOT NULL,
   tags TEXT DEFAULT '[]',
   backlinks TEXT DEFAULT '[]',
+  audio_clips TEXT DEFAULT '[]',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

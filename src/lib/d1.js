@@ -109,6 +109,7 @@ export class D1DatabaseService {
           content: memo.content,
           tags: JSON.parse(memo.tags || '[]'),
           backlinks: JSON.parse(memo.backlinks || '[]'),
+          audioClips: JSON.parse(memo.audio_clips || '[]'),
           timestamp: memo.created_at,
           lastModified: memo.updated_at,
           createdAt: memo.created_at,
@@ -175,14 +176,29 @@ export class D1DatabaseService {
     if (existingMemo) {
       // 更新现有memo
       await db
-        .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, updated_at = ? WHERE memo_id = ?')
-        .bind(memo.content, JSON.stringify(memo.tags || []), JSON.stringify(Array.isArray(memo.backlinks) ? memo.backlinks : []), updatedAt, memo.id)
+        .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, updated_at = ? WHERE memo_id = ?')
+        .bind(
+          memo.content,
+          JSON.stringify(memo.tags || []),
+          JSON.stringify(Array.isArray(memo.backlinks) ? memo.backlinks : []),
+          JSON.stringify(Array.isArray(memo.audioClips) ? memo.audioClips : []),
+          updatedAt,
+          memo.id
+        )
         .run();
     } else {
       // 插入新memo
       await db
-        .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(memo.id, memo.content, JSON.stringify(memo.tags || []), JSON.stringify(Array.isArray(memo.backlinks) ? memo.backlinks : []), createdAt, updatedAt)
+        .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(
+          memo.id,
+          memo.content,
+          JSON.stringify(memo.tags || []),
+          JSON.stringify(Array.isArray(memo.backlinks) ? memo.backlinks : []),
+          JSON.stringify(Array.isArray(memo.audioClips) ? memo.audioClips : []),
+          createdAt,
+          updatedAt
+        )
         .run();
     }
   }
@@ -280,6 +296,8 @@ export class D1DatabaseService {
           memo_id TEXT NOT NULL UNIQUE,
           content TEXT NOT NULL,
           tags TEXT DEFAULT '[]',
+          backlinks TEXT DEFAULT '[]',
+          audio_clips TEXT DEFAULT '[]',
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )

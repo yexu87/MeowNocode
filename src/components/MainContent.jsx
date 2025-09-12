@@ -56,7 +56,11 @@ const MainContent = ({
   onAddBacklink,
   onPreviewMemo,
   pendingNewBacklinks
-  , onRemoveBacklink
+  , onRemoveBacklink,
+  // audio
+  onAddAudioClip,
+  pendingNewAudioClips,
+  onRemoveAudioClip
 }) => {
   const { themeColor } = useTheme();
 
@@ -92,6 +96,9 @@ const MainContent = ({
   onPreviewMemo={onPreviewMemo}
   pendingNewBacklinks={pendingNewBacklinks}
   onRemoveBacklink={onRemoveBacklink}
+  onAddAudioClip={onAddAudioClip}
+  audioClips={pendingNewAudioClips}
+  onRemoveAudioClip={onRemoveAudioClip}
       />
 
       {/* Memos列表 */}
@@ -121,6 +128,8 @@ const MainContent = ({
   onAddBacklink={onAddBacklink}
   onPreviewMemo={onPreviewMemo}
   onRemoveBacklink={onRemoveBacklink}
+  onAddAudioClip={onAddAudioClip}
+  onRemoveAudioClip={onRemoveAudioClip}
       />
     </div>
   );

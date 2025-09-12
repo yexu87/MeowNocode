@@ -29,7 +29,7 @@ export async function onRequest(context) {
     } else if (method === 'POST') {
       // 创建或更新memo
       const body = await request.json();
-  const { memo_id, content, tags, backlinks, created_at, updated_at } = body;
+      const { memo_id, content, tags, backlinks, audio_clips, created_at, updated_at } = body;
       
       if (!memo_id || !content) {
         return new Response(JSON.stringify({ error: '缺少必要参数' }), {
@@ -47,14 +47,29 @@ export async function onRequest(context) {
       if (existingMemo) {
         // 更新现有memo
         await env.DB
-          .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, updated_at = ? WHERE memo_id = ?')
-          .bind(content, JSON.stringify(tags || []), JSON.stringify(backlinks || []), updated_at || new Date().toISOString(), memo_id)
+          .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, updated_at = ? WHERE memo_id = ?')
+          .bind(
+            content,
+            JSON.stringify(tags || []),
+            JSON.stringify(backlinks || []),
+            JSON.stringify(audio_clips || []),
+            updated_at || new Date().toISOString(),
+            memo_id
+          )
           .run();
       } else {
         // 插入新memo
         await env.DB
-          .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-          .bind(memo_id, content, JSON.stringify(tags || []), JSON.stringify(backlinks || []), created_at || new Date().toISOString(), updated_at || new Date().toISOString())
+          .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .bind(
+            memo_id,
+            content,
+            JSON.stringify(tags || []),
+            JSON.stringify(backlinks || []),
+            JSON.stringify(audio_clips || []),
+            created_at || new Date().toISOString(),
+            updated_at || new Date().toISOString()
+          )
           .run();
       }
       

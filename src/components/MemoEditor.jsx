@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowUpRight } from 'lucide-react';
+import { Mic, Pause, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
 import { useSettings } from '@/context/SettingsContext';
 import { EMOJI_CATEGORIES, loadEmojiItems, buildEmojiUrl } from '@/config/emoji';
 import { getEmojiCategory } from '@/config/emoji';
+import fileStorageService from '@/lib/fileStorageService';
+import AudioWaveform from '@/components/AudioWaveform';
 
 const MemoEditor = ({
   value = '',
@@ -26,6 +29,10 @@ const MemoEditor = ({
   // optional focus callbacks
   onFocus,
   onBlur,
+  // audio: callback to attach a recorded audio clip to memo
+  onAddAudioClip,
+  audioClips = [],
+  onRemoveAudioClip,
 }) => {
   // theme & settings
   const { themeColor } = useTheme();
@@ -49,6 +56,26 @@ const MemoEditor = ({
   const [activeEmojiCategory, setActiveEmojiCategory] = useState(EMOJI_CATEGORIES[0]?.key || 'bili');
   const [emojiMap, setEmojiMap] = useState({});
   const emojiPanelRef = useRef(null); // { categoryKey: [{name, file}] }
+
+  // Audio recording state and waveform
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [hasMicPermission, setHasMicPermission] = useState(false);
+  const [recordStartAt, setRecordStartAt] = useState(null);
+  const [accumulatedMs, setAccumulatedMs] = useState(0);
+
+  const audioCtxRef = useRef(null);
+  const analyserRef = useRef(null);
+  const dataArrayRef = useRef(null);
+  const rafRef = useRef(null);
+  const waveformCanvasRef = useRef(null);
+  const [durationTick, setDurationTick] = useState(0);
+  const editorAudioRefs = useRef({});
+  const [editorPlaying, setEditorPlaying] = useState({});
+  const [editorClipUrls, setEditorClipUrls] = useState({});
 
   // 获取一言或内置句子
   const fetchHitokoto = async () => {
@@ -257,11 +284,206 @@ const MemoEditor = ({
     return nodes;
   };
 
+  // --- Audio waveform drawing helpers ---
+  const drawWaveform = useCallback(() => {
+    const canvas = waveformCanvasRef.current;
+    const analyser = analyserRef.current;
+    const dataArray = dataArrayRef.current;
+    if (!canvas || !analyser || !dataArray) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+    analyser.getByteTimeDomainData(dataArray);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#888';
+    ctx.beginPath();
+    const sliceWidth = width / dataArray.length;
+    let x = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const v = dataArray[i] / 128.0;
+      const y = (v * height) / 2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      x += sliceWidth;
+    }
+    ctx.stroke();
+    rafRef.current = requestAnimationFrame(drawWaveform);
+  }, []);
+
+  const setupWaveform = (stream) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      const bufferLength = analyser.fftSize;
+      const dataArray = new Uint8Array(bufferLength);
+      source.connect(analyser);
+      audioCtxRef.current = audioCtx;
+      analyserRef.current = analyser;
+      dataArrayRef.current = dataArray;
+      drawWaveform();
+    } catch (e) {
+      console.warn('Waveform setup failed:', e);
+    }
+  };
+
+  const cleanupRecording = () => {
+    try { cancelAnimationFrame(rafRef.current); } catch {}
+    rafRef.current = null;
+    try { audioCtxRef.current && audioCtxRef.current.close(); } catch {}
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    dataArrayRef.current = null;
+    if (mediaStreamRef.current) {
+      for (const track of mediaStreamRef.current.getTracks()) {
+        try { track.stop(); } catch {}
+      }
+      mediaStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+    setRecordStartAt(null);
+    setAccumulatedMs(0);
+    setIsPaused(false);
+  };
+
+  const formatMs = (ms) => {
+    const sec = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const currentDurationMs = (() => {
+    if (!recordStartAt) return accumulatedMs;
+    return accumulatedMs + (isPaused ? 0 : (Date.now() - recordStartAt));
+  })();
+
+  const handleRecordClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setHasMicPermission(true);
+        mediaStreamRef.current = stream;
+        setupWaveform(stream);
+        const mimeTypes = [
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/mp4',
+          'audio/ogg'
+        ];
+        let selectedType = '';
+        for (const mt of mimeTypes) {
+          if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mt)) {
+            selectedType = mt; break;
+          }
+        }
+        const mr = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : undefined);
+        audioChunksRef.current = [];
+        mr.ondataavailable = (evt) => {
+          if (evt.data && evt.data.size > 0) audioChunksRef.current.push(evt.data);
+        };
+        mr.onstop = async () => {
+          try {
+            const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+            const ext = (blob.type && blob.type.split('/')[1]) || 'webm';
+            const file = new File([blob], `memo_record_${Date.now()}.${ext}`, { type: blob.type || 'audio/webm' });
+            const durationMs = currentDurationMs;
+            try {
+              try { fileStorageService.init((JSON.parse(localStorage.getItem('s3Config')||'{}'))); } catch {}
+              const meta = await fileStorageService.processFile(file, { type: 'audio' });
+              const clip = { ...meta, durationMs, createdAt: new Date().toISOString(), previewUrl: URL.createObjectURL(blob) };
+              onAddAudioClip?.(currentMemoId || null, clip);
+            } catch (err) {
+              console.error('Store audio failed:', err);
+            }
+          } finally {
+            cleanupRecording();
+            setIsRecording(false);
+          }
+        };
+        mediaRecorderRef.current = mr;
+        mr.start();
+        setIsRecording(true);
+        setIsPaused(false);
+        setRecordStartAt(Date.now());
+      } catch (err) {
+        console.error('getUserMedia failed:', err);
+        setHasMicPermission(false);
+        try { await navigator.mediaDevices.getUserMedia({ audio: true }); setHasMicPermission(true); } catch {}
+      }
+    } else {
+      try { mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive' && mediaRecorderRef.current.stop(); } catch {}
+    }
+  };
+
+  const handlePauseResume = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (!isPaused) {
+      try { mr.pause(); } catch {}
+      if (recordStartAt) setAccumulatedMs(prev => prev + (Date.now() - recordStartAt));
+      setRecordStartAt(null);
+      setIsPaused(true);
+    } else {
+      try { mr.resume(); } catch {}
+      setRecordStartAt(Date.now());
+      setIsPaused(false);
+    }
+  };
+
+  // editor-level audio controls
+  const handleEditorTogglePlay = (idx) => {
+    const key = String(idx);
+    const el = editorAudioRefs.current[key];
+    if (!el) return;
+    if (el.paused) {
+      el.play();
+      setEditorPlaying((p) => ({ ...p, [key]: true }));
+    } else {
+      el.pause();
+      setEditorPlaying((p) => ({ ...p, [key]: false }));
+    }
+  };
+
   const ensureEmojiCategoryLoaded = async (categoryKey) => {
     if ((emojiMap[categoryKey] || []).length > 0) return;
     const items = await loadEmojiItems(categoryKey);
     setEmojiMap((m) => ({ ...m, [categoryKey]: items }));
   };
+
+  // resolve editor clip urls for indexeddb/base64
+  useEffect(() => {
+    const resolve = async () => {
+      try {
+        const next = {};
+        const clips = Array.isArray(audioClips) ? audioClips : [];
+        for (let i = 0; i < clips.length; i++) {
+          const clip = clips[i];
+          if (!clip) continue;
+          const key = String(i);
+          if (clip.previewUrl || clip.url || clip.data) {
+            next[key] = clip.previewUrl || clip.url || clip.data;
+          } else if (clip.storageType === 'indexeddb' && clip.id) {
+            try {
+              const restored = await fileStorageService.restoreFile(clip);
+              if (restored && restored.data) next[key] = restored.data;
+            } catch {}
+          }
+        }
+        setEditorClipUrls(next);
+      } catch {}
+    };
+    resolve();
+  }, [JSON.stringify(typeof audioClips === 'object' ? audioClips : [])]);
 
   // 计算选择卡片的屏幕定位，避免被滚动容器裁剪
   const updatePickerPosition = useCallback(() => {
@@ -372,6 +594,17 @@ const MemoEditor = ({
     fetchHitokoto();
   }, [hitokotoConfig]);
 
+  // duration ticker while recording to update UI
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      const id = setInterval(() => setDurationTick((t) => t + 1), 200);
+      return () => clearInterval(id);
+    }
+  }, [isRecording, isPaused]);
+
+  // cleanup on unmount
+  useEffect(() => () => cleanupRecording(), []);
+
   // 计算字符数 - 在输入法合成期间使用合成前的字符数
   const getDisplayCharCount = () => {
     if (isComposing && compositionValue) {
@@ -460,11 +693,57 @@ const MemoEditor = ({
         </div>
       )}
 
+      {/* 音频 Chips（编辑时显示） */}
+      {isFocused && Array.isArray(audioClips) && audioClips.length > 0 && (
+        <div className="px-3 pb-1 -mt-1 flex flex-wrap gap-2">
+          {audioClips.map((clip, idx) => {
+            const key = String(idx);
+            const src = editorClipUrls[key] || clip?.previewUrl || clip?.url || clip?.data || '';
+            const isPlaying = !!editorPlaying[key];
+            return (
+              <span key={`clip-${idx}`} className="inline-flex items-center group">
+                <button
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleEditorTogglePlay(idx); }}
+                  className="max-w-full inline-flex items-center gap-1 pl-2 pr-2 py-0.5 rounded-md bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 text-xs hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  title="播放录音"
+                >
+                  {isPlaying ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                      <path d="M8 6h3v12H8zM13 6h3v12h-3z" fill="currentColor" />
+                    </svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                      <path d="M8 5l12 7-12 7V5z" fill="currentColor" />
+                    </svg>
+                  )}
+                  <span className="truncate inline-flex items-center max-w-[180px]">录音 {clip?.durationMs ? `· ${formatMs(clip.durationMs)}` : ''}</span>
+                </button>
+                <audio
+                  ref={(el) => { if (el) editorAudioRefs.current[key] = el; }}
+                  src={src}
+                  style={{ display: 'none' }}
+                  onEnded={() => setEditorPlaying((p) => ({ ...p, [key]: false }))}
+                />
+                <button
+                  type="button"
+                  aria-label="移除录音"
+                  className="ml-1 w-4 h-4 rounded hover:bg-black/10 dark:hover:bg-white/10 text-gray-500 dark:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveAudioClip?.(currentMemoId || null, idx); }}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* 底部信息栏 */}
       {(showCharCount || onSubmit) && (
         <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 min-h-[32px] rounded-b-lg">
           {/* 未聚焦时显示一言 */}
-              {!isFocused && hitokotoConfig.enabled ? (
+              {!(isFocused || isRecording) && hitokotoConfig.enabled ? (
                 <a
                   className={cn(
                     "flex-1 text-center text-xs text-gray-500 truncate px-2 transition-colors duration-300",
@@ -478,9 +757,9 @@ const MemoEditor = ({
                 >
                   {hitokoto.text}
             </a>
-          ) : !isFocused && !hitokotoConfig.enabled ? (
+          ) : !(isFocused || isRecording) && !hitokotoConfig.enabled ? (
             <div className="flex-1"></div>
-          ) : isFocused ? (
+          ) : (isFocused || isRecording) ? (
             <>
               {/* 左侧：字数+ 插入spoiler按钮 */}
               <div className="flex items-center gap-2 relative">
@@ -565,6 +844,49 @@ const MemoEditor = ({
                     <path d="M8.5 14c1 1.2 2.5 2 3.5 2s2.5-.8 3.5-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                 </button>
+
+                {/* 录音按钮 */}
+                <button
+                  type="button"
+                  onMouseDown={handleRecordClick}
+                  className={cn(
+                    "inline-flex items-center justify-center h-7 w-7 rounded-md bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors",
+                    isRecording ? "ring-2 ring-red-500" : ""
+                  )}
+                  title={isRecording ? "停止录音" : (hasMicPermission ? "开始录音" : "申请麦克风权限并开始录音")}
+                >
+                  {isRecording ? (
+                    <div className="w-3.5 h-2.5 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
+                  ) : (
+                    <Mic className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+                  )}
+                </button>
+
+                {/* 波纹与暂停控制 */}
+                {isRecording && (
+                  <div className="ml-2 flex items-center gap-2 select-none" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                    <AudioWaveform
+                      stream={mediaStreamRef.current}
+                      width={90}
+                      height={20}
+                      className="rounded bg-gray-100 dark:bg-gray-700"
+                      style={{ display: 'block' }}
+                    />
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 min-w-[36px] text-right">{formatMs(currentDurationMs)}</div>
+                    <button
+                      type="button"
+                      onMouseDown={handlePauseResume}
+                      className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
+                      title={isPaused ? "继续录音" : "暂停录音"}
+                    >
+                      {isPaused ? (
+                        <Play className="h-4 w-4 text-gray-700 dark:text-gray-200" />
+                      ) : (
+                        <Pause className="h-4 w-4 text-gray-700 dark:text-gray-200" />
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* 双链选择卡片 */}
                 {isFocused && showBacklinkPicker && (

@@ -76,6 +76,7 @@ export class DatabaseService {
           content: memo.content,
           tags: memo.tags || [],
           backlinks: memo.backlinks || [],
+          audioClips: memo.audio_clips || [],
           timestamp: memo.created_at,
           lastModified: memo.updated_at,
           createdAt: memo.created_at,
@@ -134,7 +135,7 @@ export class DatabaseService {
     // 变更检测：若远端已有相同 memo，则仅在内容/字段发生变化时才更新，避免无用更新导致 updated_at 被重写
     const { data: existing, error: fetchErr } = await supabase
       .from(TABLES.MEMOS)
-      .select('content,tags,backlinks,created_at,updated_at')
+      .select('content,tags,backlinks,audio_clips,created_at,updated_at')
       .eq('user_id', userId)
       .eq('memo_id', memo.id)
       .maybeSingle()
@@ -150,6 +151,7 @@ export class DatabaseService {
       content: memo.content,
       tags: memo.tags || [],
       backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
+      audio_clips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
       created_at: createdAt,
       updated_at: updatedAt
     }
@@ -159,9 +161,10 @@ export class DatabaseService {
       const normalizeArr = (v) => Array.isArray(v) ? v : []
       const sameTags = JSON.stringify(normalizeArr(existing.tags)) === JSON.stringify(normalizeArr(memo.tags))
       const sameBacklinks = JSON.stringify(normalizeArr(existing.backlinks)) === JSON.stringify(normalizeArr(memo.backlinks))
+      const sameAudio = JSON.stringify(normalizeArr(existing.audio_clips)) === JSON.stringify(normalizeArr(memo.audioClips))
 
       // 若主要字段均无变化，则跳过更新，避免无意义地触发 updated_at
-      if (sameContent && sameTags && sameBacklinks) {
+      if (sameContent && sameTags && sameBacklinks && sameAudio) {
         return existing
       }
     }
