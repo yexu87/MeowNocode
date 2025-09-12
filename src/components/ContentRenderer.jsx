@@ -2,6 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from '@/context/ThemeContext';
 import Spoiler from '@/components/Spoiler';
+import { buildEmojiUrl, getEmojiCategory } from '@/config/emoji';
 
 const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   const { themeColor, currentFont } = useTheme();
@@ -37,7 +38,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
       
       // 添加标签
       const tagContent = match[1]; // #标签内容
-      const tagName = tagContent.substring(1); // 去掉#号
+      const tagName = tagContent.substring(1); // 去掉#�?
       parts.push({
         type: 'tag',
         content: tagContent,
@@ -58,9 +59,9 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     return parts;
   };
 
-  // 渲染markdown文本（不包含标签）
+  // 渲染markdown文本（不包含标签�?
   const renderMarkdownText = (text) => {
-    // 处理换行符
+    // 处理换行�?
     let processedText = text.replace(/\n/g, '  \n');
     
     // 转换标题语法
@@ -79,8 +80,8 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     return processedText;
   };
 
-  // 解析并按自定义 spoiler 语法分割文本
-  // 语法：
+  // 解析并按自定�?spoiler 语法分割文本
+  // 语法�?
   // {% spoiler 文本 %}
   // {% spoiler style:box 文本 %}
   // {% spoiler style:box color:red 文本 %}
@@ -95,13 +96,13 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
       if (before) result.push({ kind: 'text', value: before });
 
       const inner = (m[1] || '').trim();
-      // 解析参数与内容
+      // 解析参数与内�?
       let styleType = 'blur';
       let color;
       let content = inner;
 
-      // 尝试提取前部的 key:value 选项（顺序不限），直到遇到第一个非 key:value 开头的 token
-      // 用简单扫描避免把内容里的冒号误判：仅接受 style: 和 color: 两种 key
+      // 尝试提取前部�?key:value 选项（顺序不限），直到遇到第一个非 key:value 开头的 token
+      // 用简单扫描避免把内容里的冒号误判：仅接受 style: �?color: 两种 key
       const tokens = inner.split(/\s+/);
       let consumed = 0;
       for (let i = 0; i < tokens.length; i++) {
@@ -117,7 +118,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           consumed = i + 1;
           continue;
         }
-        // 第一个非选项，剩余全部作为内容
+        // 第一个非选项，剩余全部作为内�?
         break;
       }
       if (consumed > 0 && consumed < tokens.length) {
@@ -135,7 +136,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     return result;
   };
 
-  // 解析并按自定义原样 HTML 片段分割文本
+  // 解析并按自定义原�?HTML 片段分割文本
   // 语法：```__html\n ... 任意 HTML ... \n```
   const splitByRawHtml = (text) => {
     const result = [];
@@ -196,13 +197,13 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
             </span>
           );
         } else {
-          // 渲染文本部分：支持 __html 原样 HTML + spoiler + markdown
+          // 渲染文本部分：支�?__html 原样 HTML + spoiler + markdown
           const rawSegments = splitByRawHtml(part.content);
           return (
             <>
               {rawSegments.map((rawSeg, rawIdx) => {
                 if (rawSeg.kind === 'rawhtml') {
-                  // 直接渲染原样 HTML（来自 ```__html ... ``` 块）
+                  // 直接渲染原样 HTML（来�?```__html ... ``` 块）
                   return (
                     <div key={`${index}-raw-${rawIdx}`} dangerouslySetInnerHTML={{ __html: rawSeg.value }} />
                   );
@@ -210,6 +211,50 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
 
                 // 普通文本：先按 spoiler 切分，再交给 ReactMarkdown
                 const segments = splitBySpoilers(rawSeg.value);
+                const remarkEmojiShortcode = () => (tree) => {
+                  const EMOJI_RE = /:([a-z0-9]+)_([a-z0-9_\-]+):/gi;
+                  const isSkippableParent = (parent) => parent && (parent.type === 'code' || parent.type === 'inlineCode' || parent.type === 'link' || parent.type === 'image');
+                  const walk = (node, parent) => {
+                    if (!node || isSkippableParent(parent)) return;
+                    if (Array.isArray(node.children)) {
+                      // iterate copy because we'll modify
+                      for (let i = 0; i < node.children.length; i++) {
+                        const child = node.children[i];
+                        if (child.type === 'text' && typeof child.value === 'string') {
+                          const value = child.value;
+                          let match;
+                          let lastIndex = 0;
+                          const newChildren = [];
+                          while ((match = EMOJI_RE.exec(value)) !== null) {
+                            const before = value.slice(lastIndex, match.index);
+                            if (before) newChildren.push({ type: 'text', value: before });
+                            const cat = (match[1] || '').toLowerCase();
+                            const name = (match[2] || '').toLowerCase();
+                            if (getEmojiCategory(cat)) {
+                              const url = buildEmojiUrl(cat, name, 'png');
+                              newChildren.push({ type: 'image', url, title: null, alt: `emoji:${cat}_${name}` });
+                            } else {
+                              // not supported category: keep original text
+                              newChildren.push({ type: 'text', value: match[0] });
+                            }
+                            lastIndex = match.index + match[0].length;
+                          }
+                          if (newChildren.length > 0) {
+                            const rest = value.slice(lastIndex);
+                            if (rest) newChildren.push({ type: 'text', value: rest });
+                            // replace current child with newChildren list
+                            node.children.splice(i, 1, ...newChildren);
+                            i += newChildren.length - 1;
+                          }
+                        } else {
+                          walk(child, node);
+                        }
+                      }
+                    }
+                  };
+                  walk(tree, null);
+                };
+
                 if (segments.length === 1 && segments[0].kind === 'text') {
                   return (
                     <ReactMarkdown
@@ -225,8 +270,37 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                         strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                         em: ({node, ...props}) => <em className="italic" {...props} />,
                         br: () => <br />,
+                        img: ({node, ...props}) => {
+                          const isEmoji = (props?.alt || '').startsWith('emoji:') || (props?.src || '').includes('/emoji/');
+                          if (isEmoji) {
+                            const alt = props?.alt || '';
+                            const m = alt.match(/^emoji:([a-z0-9]+)_([a-z0-9_\-]+)/i);
+                            const cat = m ? m[1] : null;
+                            const name = m ? m[2] : null;
+                            return (
+                              <img
+                                {...props}
+                                style={{ height: '1em', width: 'auto', verticalAlign: '-0.2em', display: 'inline-block', margin: '0 0.1em', ...(props.style || {}) }}
+                                onError={(e) => {
+                                  if (!cat || !name) return;
+                                  const currentExt = (e.currentTarget.src.match(/\.(\w+)(?:\?|#|$)/) || [,''])[1];
+                                  const order = ['png', 'webp', 'gif'];
+                                  const rest = order.filter(x => x !== currentExt);
+                                  for (const ext of rest) {
+                                    const candidate = buildEmojiUrl(cat, name, ext);
+                                    if (e.currentTarget.src !== candidate) {
+                                      e.currentTarget.src = candidate;
+                                      return;
+                                    }
+                                  }
+                                }}
+                              />
+                            );
+                          }
+                          return <img {...props} />;
+                        },
                       }}
-                      remarkPlugins={[]}
+                      remarkPlugins={[remarkEmojiShortcode]}
                       rehypePlugins={[]}
                     >
                       {renderMarkdownText(segments[0].value)}
@@ -292,8 +366,37 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                               strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                               em: ({node, ...props}) => <em className="italic" {...props} />,
                               br: () => <br />,
+                              img: ({node, ...props}) => {
+                                const isEmoji = (props?.alt || '').startsWith('emoji:') || (props?.src || '').includes('/emoji/');
+                                if (isEmoji) {
+                                  const alt = props?.alt || '';
+                                  const m = alt.match(/^emoji:([a-z0-9]+)_([a-z0-9_\-]+)/i);
+                                  const cat = m ? m[1] : null;
+                                  const name = m ? m[2] : null;
+                                  return (
+                                    <img
+                                      {...props}
+                                      style={{ height: '1em', width: 'auto', verticalAlign: '-0.2em', display: 'inline-block', margin: '0 0.1em', ...(props.style || {}) }}
+                                      onError={(e) => {
+                                        if (!cat || !name) return;
+                                        const currentExt = (e.currentTarget.src.match(/\.(\w+)(?:\?|#|$)/) || [,''])[1];
+                                        const order = ['png', 'webp', 'gif'];
+                                        const rest = order.filter(x => x !== currentExt);
+                                        for (const ext of rest) {
+                                          const candidate = buildEmojiUrl(cat, name, ext);
+                                          if (e.currentTarget.src !== candidate) {
+                                            e.currentTarget.src = candidate;
+                                            return;
+                                          }
+                                        }
+                                      }}
+                                    />
+                                  );
+                                }
+                                return <img {...props} />;
+                              },
                             }}
-                            remarkPlugins={[]}
+                            remarkPlugins={[remarkEmojiShortcode]}
                             rehypePlugins={[]}
                           >
                             {renderMarkdownText(inner)}
