@@ -20,7 +20,8 @@ export function SettingsProvider({ children }) {
     types: ['a', 'b', 'c', 'd', 'i', 'j', 'k'] // 默认全选
   });
   const [fontConfig, setFontConfig] = useState({
-    selectedFont: 'default' // default, jinghua, lxgw, kongshan
+    selectedFont: 'default', // default, jinghua, lxgw, kongshan
+    fontSize: 16 // px, default 16
   });
   const [backgroundConfig, setBackgroundConfig] = useState({
     imageUrl: '',
@@ -338,7 +339,8 @@ export function SettingsProvider({ children }) {
     const savedFontConfig = localStorage.getItem('fontConfig');
     if (savedFontConfig) {
       try {
-        setFontConfig(JSON.parse(savedFontConfig));
+        const parsed = JSON.parse(savedFontConfig);
+        setFontConfig({ selectedFont: 'default', fontSize: 16, ...parsed });
       } catch (error) {
         console.warn('Failed to parse Font config:', error);
       }

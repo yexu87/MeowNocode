@@ -17,7 +17,31 @@ import S3ConfigPanel from './S3ConfigPanel';
 
 const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
   const { themeColor, updateThemeColor } = useTheme();
-  const { hitokotoConfig, updateHitokotoConfig, fontConfig, updateFontConfig, backgroundConfig, updateBackgroundConfig, avatarConfig, updateAvatarConfig, cloudSyncEnabled, updateCloudSyncEnabled, manualSync, cloudProvider, updateCloudProvider, aiConfig, updateAiConfig, keyboardShortcuts, updateKeyboardShortcuts, _scheduleCloudSync, musicConfig, updateMusicConfig, s3Config, updateS3Config } = useSettings();
+  const settingsCtx = useSettings() || {};
+  const {
+    hitokotoConfig = { enabled: true, types: ['a','b','c','d','i','j','k'] },
+    updateHitokotoConfig = () => {},
+    fontConfig = { selectedFont: 'default', fontSize: 16 },
+    updateFontConfig = () => {},
+    backgroundConfig = { imageUrl: '', brightness: 50, blur: 10, useRandom: false },
+    updateBackgroundConfig = () => {},
+    avatarConfig = { imageUrl: '' },
+    updateAvatarConfig = () => {},
+    cloudSyncEnabled = false,
+    updateCloudSyncEnabled = () => {},
+    manualSync = async () => ({ success: false, message: 'unavailable' }),
+    cloudProvider = 'supabase',
+    updateCloudProvider = () => {},
+    aiConfig = { enabled: false, baseUrl: '', model: '', apiKey: '' },
+    updateAiConfig = () => {},
+    keyboardShortcuts = { toggleSidebar: 'Ctrl+B', openAIDialog: 'Ctrl+K', openSettings: 'Ctrl+,', toggleCanvasMode: 'Ctrl+Shift+C', openDailyReview: 'Ctrl+R' },
+    updateKeyboardShortcuts = () => {},
+    _scheduleCloudSync = () => {},
+    musicConfig = { enabled: false, playlists: [] },
+    updateMusicConfig = () => {},
+    s3Config = { enabled: false },
+    updateS3Config = () => {},
+  } = settingsCtx;
   const { user, isAuthenticated, loginWithGitHub } = useAuth();
   const [tempColor, setTempColor] = useState(themeColor);
   const [activeTab, setActiveTab] = useState('general');
@@ -204,23 +228,46 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     updateFontConfig({ selectedFont: fontName });
   };
 
+  const baseFontSize = Number(fontConfig?.fontSize) || 16;
+  const presetSizes = [
+    { value: 14, label: '更小：14px' },
+    { value: 15, label: '稍小：15px' },
+    { value: 16, label: '推荐：16px' },
+    { value: 17, label: '稍大：17px' },
+    { value: 18, label: '更大：18px' },
+  ];
+  const currentPreset = presetSizes.find(p => p.value === baseFontSize) ? String(baseFontSize) : 'custom';
+  // 自定义字体大小下拉状态
+  const [fontSizeMenuOpen, setFontSizeMenuOpen] = useState(false);
+  const fontSizeBtnRef = useRef(null);
+  const fontSizeMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!fontSizeMenuOpen) return;
+    const onDocClick = (e) => {
+      if (fontSizeBtnRef.current && fontSizeBtnRef.current.contains(e.target)) return;
+      if (fontSizeMenuRef.current && fontSizeMenuRef.current.contains(e.target)) return;
+      setFontSizeMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick, true);
+    return () => document.removeEventListener('mousedown', onDocClick, true);
+  }, [fontSizeMenuOpen]);
+
   // 处理快捷键录制
   const handleShortcutRecord = (shortcutType) => {
     setRecordingShortcut(shortcutType);
   };
-
   // 处理键盘事件录制快捷键
   const handleKeyDown = (e) => {
     if (!recordingShortcut) return;
 
     e.preventDefault();
-    
     let key = e.key;
     if (key === 'Control') key = 'Ctrl';
     if (key === 'Meta') key = 'Ctrl';
     if (key === 'Alt') key = 'Alt';
     if (key === 'Shift') key = 'Shift';
-    
+
     setPressedKeys(prev => {
       const newSet = new Set(prev);
       newSet.add(key);
@@ -452,6 +499,25 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     fetchStars();
   }, [expandedSections.about]);
 
+  // 注入隐藏 number input 原生微调按钮样式（仅执行一次）
+  useEffect(() => {
+    try {
+      let style = document.getElementById('no-spinner-style');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'no-spinner-style';
+        style.textContent = `
+          input.no-spinner::-webkit-outer-spin-button,
+          input.no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+          input.no-spinner[type=number] { -moz-appearance: textfield; }
+        `;
+        document.head.appendChild(style);
+      }
+    } catch (e) {
+      // ignore style injection failure
+    }
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -608,8 +674,75 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
                     ))}
                   </div>
 
+                  {/* 字体大小设置 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div className="col-span-2 space-y-2">
+                      <Label className="text-sm font-medium">字体大小</Label>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <button
+                            type="button"
+                            ref={fontSizeBtnRef}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFontSizeMenuOpen(o => !o); }}
+                            className="w-full h-9 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 pl-3 pr-8 text-sm text-left shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors focus:outline-none"
+                          >
+                            {currentPreset === 'custom' ? `自定义：${baseFontSize}px` : (presetSizes.find(p => String(p.value) === currentPreset)?.label || '选择字号')}
+                            <ChevronDown
+                              className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 transition-transform ${fontSizeMenuOpen ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+                          {fontSizeMenuOpen && (
+                            <div
+                              ref={fontSizeMenuRef}
+                              className="absolute left-0 right-0 mt-1 z-40 border rounded-md shadow-lg overflow-hidden bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 animate-in fade-in zoom-in-95"
+                              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                            >
+                              <div className="py-1 max-h-64 overflow-auto custom-scrollbar">
+                                {presetSizes.map(p => (
+                                  <button
+                                    key={`size-${p.value}`}
+                                    className={`w-full text-left px-3 py-2 text-sm transition-colors ${p.value === baseFontSize ? 'bg-gray-100 dark:bg-gray-600/60' : 'hover:bg-gray-100 dark:hover:bg-gray-600/60'}`}
+                                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); updateFontConfig({ fontSize: p.value }); setFontSizeMenuOpen(false); }}
+                                  >
+                                    {p.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={10}
+                            max={32}
+                            step={1}
+                            value={baseFontSize}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              if (!Number.isNaN(v)) {
+                                const clamped = Math.max(10, Math.min(32, v));
+                                updateFontConfig({ fontSize: clamped });
+                              }
+                            }}
+                            className="w-24 text-sm no-spinner"
+                            onWheel={(e) => {
+                              e.preventDefault();
+                              const delta = e.deltaY < 0 ? 1 : -1;
+                              const next = Math.max(10, Math.min(32, (Number(baseFontSize) || 16) + delta));
+                              updateFontConfig({ fontSize: next });
+                            }}
+                            style={{ appearance: 'textfield' }}
+                          />
+                          <span className="text-sm text-gray-500 dark:text-gray-400">px</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">默认 16px</div>
+                  </div>
+
                   {/* 字体预览区域 */}
-                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600">
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600" style={{ fontSize: `${baseFontSize}px` }}>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">预览效果：</div>
                     {fontLoading ? (
                       <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
@@ -618,7 +751,7 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
                       </div>
                     ) : (
                       <div
-                        className={`text-sm text-gray-900 dark:text-white transition-all duration-300 ${
+                        className={`text-gray-900 dark:text-white transition-all duration-300 ${
                           fontConfig.selectedFont !== 'default' ? 'custom-font-content' : ''
                         }`}
                       >

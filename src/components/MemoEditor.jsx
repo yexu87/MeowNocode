@@ -417,14 +417,14 @@ const MemoEditor = ({
         className={cn(
           "w-full p-3 bg-transparent resize-none outline-none border-none theme-selection",
           "text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500",
-          currentFont !== 'default' && "custom-font-content",
+          "custom-font-content",
           disabled && "cursor-not-allowed"
         )}
         style={{
           minHeight: '120px',
           maxHeight: '400px',
           lineHeight: '1.5rem',
-          fontSize: '0.875rem',
+          fontSize: (fontConfig?.fontSize ? `${fontConfig.fontSize}px` : undefined),
           ...(currentFont === 'default' && {
             fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif'
           })
@@ -464,19 +464,19 @@ const MemoEditor = ({
       {(showCharCount || onSubmit) && (
         <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 min-h-[32px] rounded-b-lg">
           {/* 未聚焦时显示一言 */}
-          {!isFocused && hitokotoConfig.enabled ? (
-            <a
-              className={cn(
-                "flex-1 text-center text-xs text-gray-500 truncate px-2 transition-colors duration-300",
-                currentFont !== 'default' && "custom-font-content"
-              )}
-              style={{
-                '--hover-color': 'var(--theme-color)',
-              }}
-              onMouseEnter={(e) => e.target.style.color = 'var(--theme-color)'}
-              onMouseLeave={(e) => e.target.style.color = ''}
-            >
-              {hitokoto.text}
+              {!isFocused && hitokotoConfig.enabled ? (
+                <a
+                  className={cn(
+                    "flex-1 text-center text-xs text-gray-500 truncate px-2 transition-colors duration-300",
+                    currentFont !== 'default' && "custom-font-content"
+                  )}
+                  style={{
+                    '--hover-color': 'var(--theme-color)',
+                  }}
+                  onMouseEnter={(e) => e.target.style.color = 'var(--theme-color)'}
+                  onMouseLeave={(e) => e.target.style.color = ''}
+                >
+                  {hitokoto.text}
             </a>
           ) : !isFocused && !hitokotoConfig.enabled ? (
             <div className="flex-1"></div>

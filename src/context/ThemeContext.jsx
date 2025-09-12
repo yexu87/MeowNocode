@@ -7,6 +7,7 @@ export function ThemeProvider({ children }) {
   const [darkMode, setDarkMode] = useState(false);
   const [themeColor, setThemeColor] = useState('#818CF8');
   const [currentFont, setCurrentFont] = useState('default');
+  const [currentFontSize, setCurrentFontSize] = useState(16);
 
   // 预加载字体资源
   useEffect(() => {
@@ -46,7 +47,7 @@ export function ThemeProvider({ children }) {
     const savedDarkMode = localStorage.getItem('darkMode');
     const savedThemeColor = localStorage.getItem('themeColor');
     const savedFontConfig = localStorage.getItem('fontConfig');
-
+    
     if (savedDarkMode !== null) {
       setDarkMode(JSON.parse(savedDarkMode));
     }
@@ -57,6 +58,7 @@ export function ThemeProvider({ children }) {
       try {
         const fontConfig = JSON.parse(savedFontConfig);
         setCurrentFont(fontConfig.selectedFont || 'default');
+        setCurrentFontSize(Number(fontConfig.fontSize) || 16);
       } catch (error) {
         console.warn('Failed to parse font config:', error);
       }
@@ -153,8 +155,12 @@ export function ThemeProvider({ children }) {
         if (savedFontConfig) {
           const fontConfig = JSON.parse(savedFontConfig);
           const newFont = fontConfig.selectedFont || 'default';
+          const newSize = Number(fontConfig.fontSize) || 16;
           if (newFont !== currentFont) {
             setCurrentFont(newFont);
+          }
+          if (newSize !== currentFontSize) {
+            setCurrentFontSize(newSize);
           }
         }
       } catch (error) {
@@ -165,7 +171,7 @@ export function ThemeProvider({ children }) {
     // 每500ms检查一次字体配置变化
     const interval = setInterval(checkFontConfig, 500);
     return () => clearInterval(interval);
-  }, [currentFont]);
+  }, [currentFont, currentFontSize]);
 
   // 应用字体设置
   useEffect(() => {
@@ -212,7 +218,17 @@ export function ThemeProvider({ children }) {
 
       document.head.appendChild(fontStyle);
     }
-  }, [currentFont]);
+    // Also inject font-size variable for content scope
+    let sizeStyle = document.getElementById('custom-font-size-style');
+    if (!sizeStyle) {
+      sizeStyle = document.createElement('style');
+      sizeStyle.id = 'custom-font-size-style';
+      document.head.appendChild(sizeStyle);
+    }
+    sizeStyle.textContent = `
+      .prose { font-size: ${currentFontSize}px; }
+    `;
+  }, [currentFont, currentFontSize]);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -228,7 +244,8 @@ export function ThemeProvider({ children }) {
       toggleDarkMode,
       themeColor,
       updateThemeColor,
-      currentFont
+      currentFont,
+      currentFontSize
     }}>
       {children}
     </ThemeContext.Provider>

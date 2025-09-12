@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MoreVertical } from 'lucide-react';
 import ContentRenderer from '@/components/ContentRenderer';
 import { useTheme } from '@/context/ThemeContext';
+import { useSettings } from '@/context/SettingsContext';
 
 const DraggableMemo = ({ 
   memo, 
@@ -15,6 +16,7 @@ const DraggableMemo = ({
   scale = 1,
 }) => {
   const { currentFont } = useTheme();
+  const { fontConfig } = useSettings();
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false); // 使用 ref 实时同步拖拽状态
   const [showMenu, setShowMenu] = useState(false);
@@ -394,11 +396,12 @@ const DraggableMemo = ({
 
           {/* 内容区域 */}
           {isEditing ? (
-            <div className={`memo-edit px-4 ${currentFont !== 'default' ? 'custom-font-content' : ''}`}>
+            <div className={`memo-edit px-4 custom-font-content`} style={{ fontSize: fontConfig?.fontSize ? `${fontConfig.fontSize}px` : undefined }}>
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent scrollbar-transparent scrollbar-thin"
+                className="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent scrollbar-transparent scrollbar-thin custom-font-content"
+                style={{ fontSize: fontConfig?.fontSize ? `${fontConfig.fontSize}px` : undefined }}
                 rows={4}
                 autoFocus
                 placeholder="编辑想法..."
@@ -407,7 +410,8 @@ const DraggableMemo = ({
             </div>
            ) : (
             <div 
-              className={`px-4 ${currentFont !== 'default' ? 'custom-font-content' : ''}`}
+              className={`px-4 custom-font-content`}
+              style={{ fontSize: fontConfig?.fontSize ? `${fontConfig.fontSize}px` : undefined }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 setIsEditing(true);

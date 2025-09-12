@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Tag, ChevronRight, ChevronDown, Hash } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
+import { useSettings } from '@/context/SettingsContext';
 
 const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
   const [expandedTags, setExpandedTags] = useState(new Set());
   const [hoveredTag, setHoveredTag] = useState(null);
   const { darkMode, themeColor, currentFont } = useTheme();
+  const { fontConfig } = useSettings();
 
   // 计算标签频率和层级结构
   const { tagFrequency, tagHierarchy } = useMemo(() => {
@@ -87,7 +89,7 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
         </div>
       )}
 
-      <div className={`space-y-1 ${currentFont !== 'default' ? 'custom-font-content' : ''}`}>
+      <div className={`space-y-1 custom-font-content`} style={{ fontSize: fontConfig?.fontSize ? `${fontConfig.fontSize}px` : undefined }}>
         {sortedParentTags.length > 0 ? (
           sortedParentTags.map(parentTag => {
             const hasChildren = tagHierarchy[parentTag].length > 0;
