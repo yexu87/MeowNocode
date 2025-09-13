@@ -207,6 +207,7 @@ export function SettingsProvider({ children }) {
               content: cm.content,
               tags: cm.tags || [],
               backlinks: cm.backlinks || [],
+              audioClips: Array.isArray(cm.audio_clips) ? cm.audio_clips : [],
               createdAt: cm.created_at,
               updatedAt: cm.updated_at,
               timestamp: cm.created_at,
@@ -222,6 +223,7 @@ export function SettingsProvider({ children }) {
                 content: cm.content,
                 tags: cm.tags || [],
                 backlinks: cm.backlinks || [],
+                audioClips: Array.isArray(cm.audio_clips) ? cm.audio_clips : (Array.isArray(lm.audioClips) ? lm.audioClips : []),
                 updatedAt: cm.updated_at,
                 lastModified: cm.updated_at
               });
@@ -710,7 +712,7 @@ export function SettingsProvider({ children }) {
           if (lTime >= cTime) {
             merged.push(l);
           } else {
-            merged.push({ id, content: c.content, tags: c.tags || [], backlinks: c.backlinks || [], createdAt: c.created_at, updatedAt: c.updated_at, timestamp: c.created_at, lastModified: c.updated_at });
+            merged.push({ id, content: c.content, tags: c.tags || [], backlinks: c.backlinks || [], audioClips: Array.isArray(c.audio_clips) ? c.audio_clips : [], createdAt: c.created_at, updatedAt: c.updated_at, timestamp: c.created_at, lastModified: c.updated_at });
           }
         } else if (l && !c) {
           // 云端无该 memo：若无法判断本地时间（新建未带时间戳）或 lastSyncAt 为 0，则保留；
@@ -721,7 +723,7 @@ export function SettingsProvider({ children }) {
             merged.push(l);
           }
         } else if (!l && c) {
-          merged.push({ id, content: c.content, tags: c.tags || [], backlinks: c.backlinks || [], createdAt: c.created_at, updatedAt: c.updated_at, timestamp: c.created_at, lastModified: c.updated_at });
+          merged.push({ id, content: c.content, tags: c.tags || [], backlinks: c.backlinks || [], audioClips: Array.isArray(c.audio_clips) ? c.audio_clips : [], createdAt: c.created_at, updatedAt: c.updated_at, timestamp: c.created_at, lastModified: c.updated_at });
         }
       });
 
