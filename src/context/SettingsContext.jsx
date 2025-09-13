@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import { DatabaseService } from '@/lib/database';
 import { D1DatabaseService } from '@/lib/d1';
 import { D1ApiClient } from '@/lib/d1-api';
@@ -17,7 +17,7 @@ export function SettingsProvider({ children }) {
   const { user } = useAuth();
   const [hitokotoConfig, setHitokotoConfig] = useState({
     enabled: true,
-    types: ['a', 'b', 'c', 'd', 'i', 'j', 'k'] // 默认全选
+    types: ['a', 'b', 'c', 'd', 'i', 'j', 'k'] // 默认全部类型
   });
   const [fontConfig, setFontConfig] = useState({
     selectedFont: 'default', // default, jinghua, lxgw, kongshan
@@ -26,7 +26,7 @@ export function SettingsProvider({ children }) {
   const [backgroundConfig, setBackgroundConfig] = useState({
     imageUrl: '',
     brightness: 50, // 0-100
-  blur: 10, // 0-50 磨砂玻璃程度
+  blur: 10, // 0-50 模糊强度
   useRandom: false // 是否使用随机背景
   });
   const [avatarConfig, setAvatarConfig] = useState({
@@ -41,7 +41,7 @@ export function SettingsProvider({ children }) {
     enabled: false
   });
 
-  // 音乐功能配置（启动即从 localStorage 读取，避免初始空列表导致恢复失败）
+  // 音乐功能配置（启用即从 localStorage 读取，避免初始空列表导致恢复失败）
   const [musicConfig, setMusicConfig] = useState(() => {
     try {
       const saved = localStorage.getItem('musicConfig');
@@ -51,7 +51,7 @@ export function SettingsProvider({ children }) {
     }
   });
 
-  // S3存储配置
+  // S3 存储配置
   const [s3Config, setS3Config] = useState({
     enabled: false,
     endpoint: '',
@@ -89,8 +89,9 @@ export function SettingsProvider({ children }) {
     if (syncingRef.current) { pendingRef.current = true; return; }
     syncingRef.current = true;
     try {
-      // 先下行：拉取云端，基于 lastCloudSyncAt 处理“远端删除”，避免本地旧数据回传导致复活
-      const lastSyncAt = Number(localStorage.getItem('lastCloudSyncAt') || 0);
+  // 先下行：拉取远端，根据 lastCloudSyncAt 处理“远端删除”，避免本地旧数据回写导致复活
+      const providerSyncKey = (p) => `lastCloudSyncAt:${p}`;
+      const lastSyncAt = Number(localStorage.getItem(providerSyncKey(cloudProvider)) || 0);
       let cloudMemos = [];
       if (cloudProvider === 'supabase') {
         if (user) {
@@ -128,7 +129,7 @@ export function SettingsProvider({ children }) {
         }
       }
 
-      // 与本地对比并应用远端删除/更新/新增
+  // 与本地对比并应用远端 删除/更新/新增
       try {
   const localMemos = JSON.parse(localStorage.getItem('memos') || '[]');
   const pinned = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
@@ -137,18 +138,18 @@ export function SettingsProvider({ children }) {
         const localMap = new Map((localMemos || []).map(m => [String(m.id), m]));
         const cloudMap = new Map((cloudMemos || []).map(m => [String(m.memo_id), m]));
         
-        // 获取当前的删除墓碑，避免恢复已标记删除的memo
+  // 获取当前的删除墓碑，避免恢复已标记删除的 memo
         const tombstones = getDeletedMemoTombstones();
         const deletedSet = new Set((tombstones || []).map(t => String(t.id)));
 
         let changed = false;
 
-        // 1) 远端不存在且本地更新时间 <= lastSyncAt -> 视为远端已删除，移除本地
+  // 1) 远端不存在且本地更新时间 <= lastSyncAt -> 视为远端已删除，移除本地
         const keptLocal = [];
         const removedIds = [];
         for (const m of localMemos) {
           const id = String(m.id);
-          // 若本地已标记删除，强制过滤掉，避免被下行合并回写复活
+          // 如果本地已标记删除，直接过滤，避免被下行合并重新写回复活
           if (deletedSet.has(id)) {
             removedIds.push(id);
             changed = true;
@@ -161,7 +162,7 @@ export function SettingsProvider({ children }) {
           const lRaw = m.updatedAt || m.lastModified || m.timestamp || m.createdAt || null;
           const lTime = lRaw ? new Date(lRaw).getTime() : NaN;
           if (!Number.isFinite(lTime) || lastSyncAt === 0 || lTime > lastSyncAt) {
-            // 本地较新（可能离线新增/编辑），保留，待上行
+            // 本地更新（可能离线新增/编辑），保留，待上行
             keptLocal.push(m);
           } else {
             // 远端删除，移除本地，避免“复活”
@@ -170,15 +171,15 @@ export function SettingsProvider({ children }) {
           }
         }
 
-        // 2) 远端较新覆盖本地；远端新增补齐到本地
+  // 2) 远端更新需要覆盖本地；远端新增拉取到本地
         const mergedById = new Map(keptLocal.map(m => [String(m.id), m]));
         let pinnedChanged = false;
         for (const [id, cm] of cloudMap.entries()) {
-          // 跳过已标记删除的memo，避免恢复
+          // 跳过已标记删除的 memo，避免覆盖
           if (deletedSet.has(id)) {
             continue;
           }
-          // 若该 memo 当前在本地处于置顶，则仅更新置顶数据，不回灌到 memos 列表，避免 pin 操作被下行合并“打回”
+          // 若该 memo 当前在本地处于置顶，只更新置顶数据，不重复加入 memos 列表，避免 pin 时合并重复
           if (pinnedIds.has(id)) {
             const pm = pinnedMap.get(id);
             const pTime = new Date(pm?.updatedAt || pm?.lastModified || pm?.timestamp || pm?.createdAt || 0).getTime();
@@ -217,7 +218,7 @@ export function SettingsProvider({ children }) {
           } else {
             const lTime = new Date(lm.updatedAt || lm.lastModified || lm.timestamp || lm.createdAt || 0).getTime();
             if (cTime > lTime) {
-              // 云端较新，覆盖
+              // 远端更新，覆盖
               mergedById.set(id, {
                 ...lm,
                 content: cm.content,
@@ -232,7 +233,7 @@ export function SettingsProvider({ children }) {
           }
         }
 
-        if (changed) {
+                if (changed) {
           const merged = Array.from(mergedById.values()).map(m => ({
             ...m,
             backlinks: Array.isArray(m.backlinks) ? m.backlinks : [],
@@ -258,10 +259,10 @@ export function SettingsProvider({ children }) {
           try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'sync.downmerge' } })); } catch {}
         }
       } catch {
-        // 忽略下行合并失败，继续尽力上行
+  // 忽略下行合并失败，继续尝试上行
       }
 
-      // 再进行上行同步（upsert settings & memos）
+  // 再进行上行同步（upsert settings & memos）
       if (cloudProvider === 'supabase') {
         if (!user) return; // need auth
         await DatabaseService.syncUserData(user.id);
@@ -289,7 +290,7 @@ export function SettingsProvider({ children }) {
         })();
       }
 
-      // 然后处理删除墓碑，推送云端删除
+  // 然后处理删除墓碑，推送远端删除
       const tombstones = getDeletedMemoTombstones();
       if (tombstones && tombstones.length) {
         const ids = tombstones.map(t => t.id);
@@ -307,6 +308,7 @@ export function SettingsProvider({ children }) {
         removeDeletedMemoTombstones(ids);
       }
   lastSyncAtRef.current = Date.now();
+      localStorage.setItem(`lastCloudSyncAt:${cloudProvider}`, String(lastSyncAtRef.current));
       localStorage.setItem('lastCloudSyncAt', String(lastSyncAtRef.current));
     } finally {
       syncingRef.current = false;
@@ -331,7 +333,7 @@ export function SettingsProvider({ children }) {
   }, [cloudSyncEnabled, doSync]);
 
   useEffect(() => {
-    // 从localStorage加载一言设置
+  // 从 localStorage 加载一言设置
     const savedHitokotoConfig = localStorage.getItem('hitokotoConfig');
     if (savedHitokotoConfig) {
       try {
@@ -341,7 +343,7 @@ export function SettingsProvider({ children }) {
       }
     }
 
-    // 从localStorage加载字体设置
+  // 从 localStorage 加载字体设置
     const savedFontConfig = localStorage.getItem('fontConfig');
     if (savedFontConfig) {
       try {
@@ -352,19 +354,19 @@ export function SettingsProvider({ children }) {
       }
     }
 
-    // 从localStorage加载背景设置
+  // 从 localStorage 加载背景设置
   const savedBackgroundConfig = localStorage.getItem('backgroundConfig');
     if (savedBackgroundConfig) {
       try {
     const parsed = JSON.parse(savedBackgroundConfig);
-    // 兼容旧版本缺少 useRandom/blur/brightness/imageUrl 字段
+  // 兼容旧版本缺少 useRandom/blur/brightness/imageUrl 字段
     setBackgroundConfig({ imageUrl: '', brightness: 50, blur: 10, useRandom: false, ...parsed });
       } catch (error) {
         console.warn('Failed to parse Background config:', error);
       }
     }
 
-    // 从localStorage加载头像设置
+  // 从 localStorage 加载头像设置
     const savedAvatarConfig = localStorage.getItem('avatarConfig');
     if (savedAvatarConfig) {
       try {
@@ -374,7 +376,7 @@ export function SettingsProvider({ children }) {
       }
     }
 
-    // 从localStorage加载云端同步设置
+  // 从 localStorage 加载云同步设置
     const savedCloudSyncEnabled = localStorage.getItem('cloudSyncEnabled');
     if (savedCloudSyncEnabled) {
       try {
@@ -384,7 +386,7 @@ export function SettingsProvider({ children }) {
       }
     }
 
-    // 从localStorage加载云服务提供商设置
+  // 从 localStorage 加载云服务提供商设置
     const savedCloudProvider = localStorage.getItem('cloudProvider');
     if (savedCloudProvider) {
       try {
@@ -396,14 +398,14 @@ export function SettingsProvider({ children }) {
 
   }, []);
 
-  // 从localStorage加载S3配置
+  // 从 localStorage 加载 S3 配置
   useEffect(() => {
     try {
       const savedS3Config = localStorage.getItem('s3Config');
       if (savedS3Config) {
         const parsedConfig = JSON.parse(savedS3Config);
         setS3Config(parsedConfig);
-        // 若配置已启用，则初始化 S3 客户端
+  // 若配置已启用，则初始化 S3 客户端
         try {
           if (parsedConfig && parsedConfig.enabled) {
             const svc = require('@/lib/s3Storage').default;
@@ -418,7 +420,7 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
-  // 从localStorage加载AI配置
+  // 从 localStorage 加载 AI 配置
   useEffect(() => {
     const savedAiConfig = localStorage.getItem('aiConfig');
     if (savedAiConfig) {
@@ -430,9 +432,9 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
-  // 音乐配置已在初始化时读取，这里不再重复读取，避免覆盖正在编辑的状态
+  // 音乐配置已在初始化时读取，这里不再重复，避免覆盖编辑中的状态
 
-  // 从localStorage加载快捷键配置
+  // 从 localStorage 加载快捷键配置
   useEffect(() => {
     const savedKeyboardShortcuts = localStorage.getItem('keyboardShortcuts');
     if (savedKeyboardShortcuts) {
@@ -447,19 +449,19 @@ export function SettingsProvider({ children }) {
 
 
   useEffect(() => {
-    // 保存一言设置到localStorage
+  // 保存一言设置
     localStorage.setItem('hitokotoConfig', JSON.stringify(hitokotoConfig));
   dispatchDataChanged({ part: 'hitokoto' });
   }, [hitokotoConfig]);
 
   useEffect(() => {
-    // 保存字体设置到localStorage
+  // 保存字体设置
     localStorage.setItem('fontConfig', JSON.stringify(fontConfig));
   dispatchDataChanged({ part: 'font' });
   }, [fontConfig]);
 
   useEffect(() => {
-    // 保存背景设置到localStorage（避免将巨大 data URL 直接写入）
+  // 保存背景设置（避免直接写入过大的 data URL）
     const persist = async () => {
       try {
         const cfg = backgroundConfig || {};
@@ -470,7 +472,7 @@ export function SettingsProvider({ children }) {
         let toSave = { ...cfg };
 
         if (tooLarge) {
-          // 若无引用，先将 dataURL 存到 IndexedDB
+          // 若体积超限，先把 dataURL 存到 IndexedDB
           if (!toSave.imageRef || !toSave.imageRef.id) {
             try {
               const match = /^data:(.*?);base64,(.*)$/.exec(cfg.imageUrl || '');
@@ -488,7 +490,7 @@ export function SettingsProvider({ children }) {
               console.warn('Store background image to IndexedDB failed:', e);
             }
           }
-          // 避免写入巨大字符串
+          // 避免写入超大字符串
           toSave.imageUrl = '';
         }
 
@@ -499,7 +501,7 @@ export function SettingsProvider({ children }) {
             try {
               const minimal = { ...toSave, imageUrl: '' };
               localStorage.setItem('backgroundConfig', JSON.stringify(minimal));
-              toast.error('本地存储空间不足，已停止缓存大图。建议使用外链或随机背景。');
+              toast.error('本地存储空间不足，已停止缓存大图，建议使用外链或随机背景');
             } catch {}
           } else {
             throw err;
@@ -512,7 +514,7 @@ export function SettingsProvider({ children }) {
     try { persist(); } catch {}
   }, [backgroundConfig]);
 
-  // 如存在 IndexedDB 引用且 imageUrl 为空，则尝试在内存中恢复图片数据（不写回 localStorage）
+  // 若存在 IndexedDB 引用且 imageUrl 为空，尝试在内存中恢复图片（不回写 localStorage）
   useEffect(() => {
     const recover = async () => {
       try {
@@ -530,30 +532,30 @@ export function SettingsProvider({ children }) {
   }, [backgroundConfig?.imageRef, backgroundConfig?.imageUrl]);
 
   useEffect(() => {
-    // 保存头像设置到localStorage
+  // 保存头像设置
     localStorage.setItem('avatarConfig', JSON.stringify(avatarConfig));
   dispatchDataChanged({ part: 'avatar' });
   }, [avatarConfig]);
 
   useEffect(() => {
-    // 保存云端同步设置到localStorage
+  // 保存云同步设置
     localStorage.setItem('cloudSyncEnabled', JSON.stringify(cloudSyncEnabled));
   }, [cloudSyncEnabled]);
 
   useEffect(() => {
-    // 保存云服务提供商设置到localStorage
+  // 保存云服务提供商设置
     localStorage.setItem('cloudProvider', cloudProvider);
   }, [cloudProvider]);
 
 
   useEffect(() => {
-    // 保存AI配置到localStorage
+  // 保存 AI 配置
     localStorage.setItem('aiConfig', JSON.stringify(aiConfig));
   dispatchDataChanged({ part: 'ai' });
   }, [aiConfig]);
 
   useEffect(() => {
-    // 保存快捷键配置到localStorage
+  // 保存快捷键配置
     localStorage.setItem('keyboardShortcuts', JSON.stringify(keyboardShortcuts));
   }, [keyboardShortcuts]);
 
@@ -563,18 +565,18 @@ export function SettingsProvider({ children }) {
     dispatchDataChanged({ part: 'music' });
   }, [musicConfig]);
 
-  // 保存S3配置
+  // 保存 S3 配置
   useEffect(() => {
     localStorage.setItem('s3Config', JSON.stringify(s3Config));
     dispatchDataChanged({ part: 's3' });
-    // 若开启则保证运行期已初始化
+  // 若已启用则保证运行时已初始化
     try {
       const svc = require('@/lib/s3Storage').default;
       if (s3Config && s3Config.enabled) {
         svc.init(s3Config);
       }
     } catch (e) {
-      // 仅日志，不打断设置保存
+  // 仅写日志，不打断设置保存
       console.warn('Init S3 on change failed:', e);
     }
   }, [s3Config]);
@@ -613,7 +615,7 @@ export function SettingsProvider({ children }) {
         const pinned = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
         const hasLocal = (Array.isArray(memos) && memos.length > 0) || (Array.isArray(pinned) && pinned.length > 0);
         if (hasLocal) {
-          // 仍然进行一次快速同步，保证云端跟上当前设备
+          // 仍执行一次快速同步，保证远端覆盖当前设备
           if (cloudSyncEnabled) scheduleSync('startup');
           return;
         }
@@ -640,10 +642,11 @@ export function SettingsProvider({ children }) {
     maybeRestore();
   }, [cloudSyncEnabled, cloudProvider, user, scheduleSync]);
 
-  // 统一“手动同步”按钮逻辑：云 -> 本地 合并 -> 云
+  // 统一“手动同步”流程：远端 -> 本地 合并 -> 上行
   const manualSync = async () => {
     try {
-  const lastSyncAt = Number(localStorage.getItem('lastCloudSyncAt') || 0);
+      const providerSyncKey = (p) => `lastCloudSyncAt:${p}`;
+      const lastSyncAt = Number(localStorage.getItem(providerSyncKey(cloudProvider)) || 0);
       const local = {
         memos: JSON.parse(localStorage.getItem('memos') || '[]'),
         pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
@@ -657,11 +660,11 @@ export function SettingsProvider({ children }) {
         musicConfig: JSON.parse(localStorage.getItem('musicConfig') || '{"enabled":true,"customSongs":[]}')
       };
 
-      // 拉取云端
+  // 拉取远端
   let cloudMemos = [];
   let cloudSettings = null;
       if (cloudProvider === 'supabase') {
-        if (!user) throw new Error('请先登录');
+        if (!user) throw new Error('璇峰厛鐧诲綍');
         cloudMemos = await DatabaseService.getUserMemos(user.id);
         cloudSettings = await DatabaseService.getUserSettings(user.id);
       } else {
@@ -695,7 +698,7 @@ export function SettingsProvider({ children }) {
         }
       }
 
-      // 合并
+  // 合并
       const localMap = new Map((local.memos || []).map(m => [String(m.id), m]));
       const cloudMap = new Map((cloudMemos || []).map(m => [String(m.memo_id), m]));
       const tombstones = getDeletedMemoTombstones();
@@ -715,8 +718,8 @@ export function SettingsProvider({ children }) {
             merged.push({ id, content: c.content, tags: c.tags || [], backlinks: c.backlinks || [], audioClips: Array.isArray(c.audio_clips) ? c.audio_clips : [], createdAt: c.created_at, updatedAt: c.updated_at, timestamp: c.created_at, lastModified: c.updated_at });
           }
         } else if (l && !c) {
-          // 云端无该 memo：若无法判断本地时间（新建未带时间戳）或 lastSyncAt 为 0，则保留；
-          // 否则若本地更新时间不晚于 lastSyncAt，视为“云端已删除”，不再复活
+          // 远端无该 memo：若无法判断本地时间（新建未写入时间戳）或 lastSyncAt 为 0，则保留；
+          // 否则若本地更新时间不晚于 lastSyncAt，视为远端已删除，不再复活
           const lRaw = l.updatedAt || l.lastModified || l.timestamp || l.createdAt || null;
           const lTime = lRaw ? new Date(lRaw).getTime() : NaN;
           if (!Number.isFinite(lTime) || lastSyncAt === 0 || lTime > lastSyncAt) {
@@ -729,7 +732,7 @@ export function SettingsProvider({ children }) {
 
   localStorage.setItem('memos', JSON.stringify(merged.map(m => ({ ...m, backlinks: Array.isArray(m.backlinks) ? m.backlinks : [] }))));
 
-      // 清理被删除的置顶引用
+  // 清理被删除的置顶引用
       try {
         const mergedIds = new Set(merged.map(m => String(m.id)));
         const pinned = Array.isArray(local.pinnedMemos) ? local.pinnedMemos : [];
@@ -786,10 +789,10 @@ export function SettingsProvider({ children }) {
       localStorage.setItem('musicConfig', JSON.stringify(mergedSettings.musicConfig || { enabled: true, customSongs: [] }));
   localStorage.setItem('s3Config', JSON.stringify(mergedSettings.s3Config || { enabled: false, endpoint: '', accessKeyId: '', secretAccessKey: '', bucket: '', region: 'auto', publicUrl: '', provider: 'r2' }));
 
-      // 删除墓碑
+  // 删除墓碑
       const toDeleteIds = Array.from(deletedSet);
       if (cloudProvider === 'supabase') {
-        if (!user) throw new Error('请先登录');
+        if (!user) throw new Error('璇峰厛鐧诲綍');
         for (const id of toDeleteIds) {
           try { await DatabaseService.deleteMemo(user.id, id); } catch {}
         }
@@ -807,6 +810,7 @@ export function SettingsProvider({ children }) {
         try { await D1ApiClient.upsertUserSettings(mergedSettings); } catch { await D1DatabaseService.upsertUserSettings(mergedSettings); }
       }
       removeDeletedMemoTombstones(toDeleteIds);
+      localStorage.setItem(`lastCloudSyncAt:${cloudProvider}`, String(Date.now()));
       localStorage.setItem('lastCloudSyncAt', String(Date.now()));
       try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'manualSync' } })); } catch {}
       return { success: true, message: '同步完成' };
@@ -837,12 +841,126 @@ export function SettingsProvider({ children }) {
     setCloudSyncEnabled(enabled);
   };
 
-  const updateCloudProvider = (provider) => {
+    const updateCloudProvider = async (nextProvider) => {
     try {
-      setCloudProvider(provider);
+      if (!nextProvider || nextProvider === cloudProvider) {
+        setCloudProvider(nextProvider || cloudProvider);
+        localStorage.setItem('cloudProvider', nextProvider || cloudProvider);
+        return;
+      }
+
+      // 暂停自动同步，防止切换过程中触发并发 doSync
+      syncingRef.current = true;
+
+      const now = Date.now();
+      const provKey = (p) => `lastCloudSyncAt:${p}`;
+
+      // 读取本地现状
+      const localMemos = JSON.parse(localStorage.getItem('memos') || '[]');
+      const localPinned = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
+
+      // 拉取两个 provider 的快照（能拉多少拉多少）
+      const fetchSupabase = async () => {
+        try {
+          if (!user) return { memos: [], settings: null };
+          const memos = await DatabaseService.getUserMemos(user.id);
+          const settings = await DatabaseService.getUserSettings(user.id);
+          return { memos, settings };
+        } catch { return { memos: [], settings: null }; }
+      };
+      const fetchD1 = async () => {
+        try {
+          const res = await D1ApiClient.restoreUserData();
+          if (res?.success) return { memos: res.data?.memos || [], settings: res.data?.settings || null };
+          throw new Error('restore via API failed');
+        } catch {
+          try { return { memos: await D1DatabaseService.getAllMemos(), settings: await D1DatabaseService.getUserSettings() }; }
+          catch { return { memos: [], settings: null }; }
+        }
+      };
+
+      const [supSnap, d1Snap] = await Promise.all([fetchSupabase(), fetchD1()]);
+
+      // 归一化 memos 为本地结构
+      const normCloud = (arr, kind) => (arr || []).map(m => ({
+        id: m.memo_id,
+        content: m.content,
+        tags: Array.isArray(m.tags) ? m.tags : (typeof m.tags === 'string' ? JSON.parse(m.tags || '[]') : []),
+        backlinks: Array.isArray(m.backlinks) ? m.backlinks : (typeof m.backlinks === 'string' ? JSON.parse(m.backlinks || '[]') : []),
+        audioClips: Array.isArray(m.audio_clips) ? m.audio_clips : (typeof m.audio_clips === 'string' ? JSON.parse(m.audio_clips || '[]') : []),
+        createdAt: m.created_at,
+        updatedAt: m.updated_at,
+        timestamp: m.created_at,
+        lastModified: m.updated_at
+      }));
+
+      const supMemos = normCloud(supSnap.memos, 'supabase');
+      const d1Memos = normCloud(d1Snap.memos, 'd1');
+
+      // 合并：local ∪ supabase ∪ d1（按 id 对齐，取较新 updatedAt），应用删除墓碑
+      const byId = new Map();
+      const push = (m) => {
+        const id = String(m.id);
+        if (!byId.has(id)) { byId.set(id, m); return; }
+        const a = byId.get(id);
+        const at = new Date(a.updatedAt || a.lastModified || a.createdAt || a.timestamp || 0).getTime();
+        const bt = new Date(m.updatedAt || m.lastModified || m.createdAt || m.timestamp || 0).getTime();
+        byId.set(id, bt >= at ? ({
+          ...m,
+          tags: Array.isArray(m.tags) ? m.tags : [],
+          backlinks: Array.isArray(m.backlinks) ? m.backlinks : [],
+          audioClips: Array.isArray(m.audioClips) ? m.audioClips : []
+        }) : a);
+      };
+      localMemos.forEach(push); supMemos.forEach(push); d1Memos.forEach(push);
+
+      // 删除墓碑
+      const tomb = getDeletedMemoTombstones();
+      const delSet = new Set((tomb || []).map(t => String(t.id)));
+      const merged = Array.from(byId.values()).filter(m => !delSet.has(String(m.id)));
+      merged.sort((a,b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0));
+
+      // 写回本地
+      localStorage.setItem('memos', JSON.stringify(merged));
+      // 合并置顶（仅保留仍存在的 id）
+      try {
+        const mergedIds = new Set(merged.map(m => String(m.id)));
+        const nextPinned = (Array.isArray(localPinned) ? localPinned : []).filter(p => mergedIds.has(String(p && typeof p==='object' ? p.id : p)));
+        localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+      } catch {}
+
+      // 推送到两个 provider，尽量保证“切换即对齐”，后续再只用选中的 provider
+      if (user) { try { await DatabaseService.syncUserData(user.id); } catch {} }
+      try {
+        const local = {
+          memos: merged,
+          pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
+          themeColor: localStorage.getItem('themeColor') || '#818CF8',
+          darkMode: localStorage.getItem('darkMode') || 'false',
+          hitokotoConfig: JSON.parse(localStorage.getItem('hitokotoConfig') || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}'),
+          fontConfig: JSON.parse(localStorage.getItem('fontConfig') || '{"selectedFont":"default"}') ,
+          backgroundConfig: JSON.parse(localStorage.getItem('backgroundConfig') || '{"imageUrl":"","brightness":50,"blur":10,"useRandom":false}'),
+          avatarConfig: JSON.parse(localStorage.getItem('avatarConfig') || '{"imageUrl":""}') ,
+          canvasConfig: JSON.parse(localStorage.getItem('canvasState') || 'null'),
+          musicConfig: JSON.parse(localStorage.getItem('musicConfig') || '{"enabled":true,"customSongs":[]}')
+        };
+        await D1ApiClient.syncUserData(local);
+      } catch (_) { try { await D1DatabaseService.syncUserData(); } catch {} }
+
+      // 更新 provider 专属 lastSyncAt，避免立刻再度触发“远端删除”判定
+      localStorage.setItem(provKey(nextProvider), String(now));
+      localStorage.setItem(provKey(cloudProvider), String(now));
+      localStorage.setItem('lastCloudSyncAt', String(now));
+
+      // 完成切换
+      setCloudProvider(nextProvider);
+      localStorage.setItem('cloudProvider', nextProvider);
+      try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'provider.switch' } })); } catch {}
     } catch (error) {
       console.error('更新云服务提供商失败:', error);
       throw error;
+    } finally {
+      syncingRef.current = false;
     }
   };
 
@@ -860,39 +978,39 @@ export function SettingsProvider({ children }) {
   };
 
 
-  // Supabase同步功能
+  // Supabase 同步功能
   const syncToSupabase = async () => {
     if (!user) {
-      throw new Error('请先登录');
+  throw new Error('请先登录');
     }
 
     try {
       const result = await DatabaseService.syncUserData(user.id);
       return result;
     } catch (error) {
-      console.error('同步到Supabase失败:', error);
+  console.error('同步到 Supabase 失败:', error);
       return { success: false, message: error.message };
     }
   };
 
   const restoreFromSupabase = async () => {
     if (!user) {
-      throw new Error('请先登录');
+  throw new Error('请先登录');
     }
 
     try {
       const result = await DatabaseService.restoreUserData(user.id);
       return result;
     } catch (error) {
-      console.error('从Supabase恢复失败:', error);
+  console.error('从 Supabase 恢复失败:', error);
       return { success: false, message: error.message };
     }
   };
 
-  // D1同步功能
+  // D1 同步功能
   const syncToD1 = async () => {
     try {
-      // 获取本地数据
+  // 获取本地数据
       const localData = {
         memos: JSON.parse(localStorage.getItem('memos') || '[]'),
         pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
@@ -905,26 +1023,26 @@ export function SettingsProvider({ children }) {
   canvasConfig: JSON.parse(localStorage.getItem('canvasState') || 'null')
       };
 
-      // 优先尝试使用API客户端（适用于Cloudflare Pages）
+  // 优先尝试使用 API 客户端（适用于 Cloudflare Pages）
       try {
         const result = await D1ApiClient.syncUserData(localData);
         return result;
       } catch (apiError) {
-        console.warn('D1 API客户端失败，尝试直接访问D1数据库:', apiError);
+  console.warn('D1 API 客户端失败，尝试直接访问 D1 数据库', apiError);
         
-        // 如果API客户端失败，尝试直接访问D1数据库（适用于Cloudflare Workers）
+  // 如果 API 客户端失败，尝试直接访问 D1 数据库（适用于 Cloudflare Workers）
         const result = await D1DatabaseService.syncUserData();
         return result;
       }
     } catch (error) {
-      console.error('同步到D1失败:', error);
+  console.error('同步到 D1 失败:', error);
       return { success: false, message: error.message };
     }
   };
 
   const restoreFromD1 = async () => {
     try {
-      // 优先尝试使用API客户端（适用于Cloudflare Pages）
+  // 优先尝试使用 API 客户端（适用于 Cloudflare Pages）
       try {
         const result = await D1ApiClient.restoreUserData();
         
@@ -970,19 +1088,19 @@ export function SettingsProvider({ children }) {
             }
           }
           
-          return { success: true, message: '从D1恢复数据成功，请刷新页面查看' };
+          return { success: true, message: '从 D1 恢复数据成功，请刷新页面查看' };
         }
         
-        throw new Error(result.message || '恢复数据失败');
+  throw new Error(result.message || '恢复数据失败');
       } catch (apiError) {
-        console.warn('D1 API客户端失败，尝试直接访问D1数据库:', apiError);
+  console.warn('D1 API 客户端失败，尝试直接访问 D1 数据库', apiError);
         
-        // 如果API客户端失败，尝试直接访问D1数据库（适用于Cloudflare Workers）
+        // 濡傛灉API瀹㈡埛绔け璐ワ紝灏濊瘯鐩存帴璁块棶D1鏁版嵁搴擄紙閫傜敤浜嶤loudflare Workers锛?
   const result = await D1DatabaseService.restoreUserData();
         return result;
       }
     } catch (error) {
-      console.error('从D1恢复失败:', error);
+  console.error('从 D1 恢复失败:', error);
       return { success: false, message: error.message };
     }
   };
@@ -1021,3 +1139,8 @@ export function SettingsProvider({ children }) {
     </SettingsContext.Provider>
   );
 }
+
+
+
+
+
