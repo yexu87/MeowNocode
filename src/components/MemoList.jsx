@@ -81,48 +81,33 @@ const MemoList = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memos, pinnedMemos]);
 
-  // 处理菜单定位
-  useEffect(() => {
-    if (activeMenuId && menuRefs.current[activeMenuId]) {
-      const menuElement = menuRefs.current[activeMenuId];
-      const buttonRect = menuElement.getBoundingClientRect();
-      
-      // 更新菜单位置
-      const updateMenuPosition = () => {
-        const menuPanel = menuElement.querySelector('[class*="fixed"]');
-        if (menuPanel) {
-          menuPanel.style.top = `${buttonRect.bottom + 5}px`;
-          
-          // 确保菜单不会超出视窗右侧
-          const viewportWidth = window.innerWidth;
-          const menuWidth = menuPanel.offsetWidth;
-          const rightSpace = viewportWidth - buttonRect.right;
-          
-          if (rightSpace < menuWidth) {
-            // 如果右侧空间不足，将菜单对齐到按钮左侧
-            menuPanel.style.right = 'auto';
-            menuPanel.style.left = `${buttonRect.left - menuWidth + buttonRect.width}px`;
-          } else {
-            // 否则保持对齐到按钮右侧
-            menuPanel.style.right = `${viewportWidth - buttonRect.right}px`;
-            menuPanel.style.left = 'auto';
-          }
-        }
-      };
-      
-      // 初始更新位置
-      updateMenuPosition();
-      
-      // 监听窗口大小变化和滚动，重新计算位置
-      window.addEventListener('resize', updateMenuPosition);
-      window.addEventListener('scroll', updateMenuPosition);
-      
-      return () => {
-        window.removeEventListener('resize', updateMenuPosition);
-        window.removeEventListener('scroll', updateMenuPosition);
-      };
+  // 计算菜单位置
+  const getMenuPosition = (memoId) => {
+    const menuElement = menuRefs.current[memoId];
+    if (!menuElement) return { style: { opacity: 0 } };
+
+    const buttonRect = menuElement.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const menuWidth = 192; // w-48 = 192px
+    const rightSpace = viewportWidth - buttonRect.right;
+
+    let style = {
+      top: buttonRect.bottom + 5,
+      opacity: 1,
+    };
+
+    if (rightSpace < menuWidth) {
+      // 如果右侧空间不足，将菜单对齐到按钮左侧
+      style.right = 'auto';
+      style.left = buttonRect.left - menuWidth + buttonRect.width;
+    } else {
+      // 否则对齐到按钮右侧
+      style.right = viewportWidth - buttonRect.right;
+      style.left = 'auto';
     }
-  }, [activeMenuId]);
+
+    return { style };
+  };
 
   // 当列表中有正在编辑的 memo 时，点击编辑器外自动保存并退出编辑
   useEffect(() => {
@@ -229,8 +214,9 @@ const MemoList = ({
                       {/* 菜单面板 */}
                       {activeMenuId === memo.id && (
                         <div
-                          className="fixed w-40 sm:w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
+                          className="fixed w-40 sm:w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700 transition-opacity duration-150"
                           onClick={(e) => e.stopPropagation()}
+                          style={getMenuPosition(memo.id).style}
                         >
                           {/* 公开/私有切换按钮 */}
                           {isAuthenticated && (

@@ -260,6 +260,7 @@ import { toast } from 'sonner';
       updatedAt: memo.updatedAt || memo.lastModified || new Date().toISOString(),
       backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
       audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
+      is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false, // 为旧memo设置默认值
       // 画布位置：优先使用 memo 自身保存的，退回到 canvasState.memoPositions
       canvasX: (typeof memo.canvasX === 'number' ? memo.canvasX : (memoPositions[memo.id]?.x)),
       canvasY: (typeof memo.canvasY === 'number' ? memo.canvasY : (memoPositions[memo.id]?.y))
@@ -348,6 +349,7 @@ import { toast } from 'sonner';
             updatedAt: memo.updatedAt || memo.lastModified || new Date().toISOString(),
             backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
             audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
+            is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false, // 为旧memo设置默认值
             canvasX: (typeof memo.canvasX === 'number' ? memo.canvasX : (memoPositions[memo.id]?.x)),
             canvasY: (typeof memo.canvasY === 'number' ? memo.canvasY : (memoPositions[memo.id]?.y))
           }));
@@ -472,7 +474,8 @@ import { toast } from 'sonner';
       timestamp: nowIso,
       lastModified: nowIso,
       backlinks: Array.isArray(pendingNewBacklinks) ? pendingNewBacklinks : [],
-      audioClips: Array.isArray(pendingNewAudioClips) ? pendingNewAudioClips : []
+      audioClips: Array.isArray(pendingNewAudioClips) ? pendingNewAudioClips : [],
+      is_public: false // 默认为私有
     };
 
     // 更新现有 memos 与 pinnedMemos，将新 memoId 写入被选目标的 backlinks（双向）
@@ -579,8 +582,21 @@ import { toast } from 'sonner';
             ? { ...memo, is_public: !memo.is_public, updatedAt: new Date().toISOString() }
             : memo
         );
-        setMemos(updateMemoPublicStatus);
-        setPinnedMemos(updateMemoPublicStatus);
+        const updatedMemos = updateMemoPublicStatus(memos);
+        const updatedPinnedMemos = updateMemoPublicStatus(pinnedMemos);
+
+        setMemos(updatedMemos);
+        setPinnedMemos(updatedPinnedMemos);
+
+        // 立即保存到localStorage以确保持久化
+        localStorage.setItem('memos', JSON.stringify(updatedMemos));
+        localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinnedMemos));
+
+        // 提示用户操作成功
+        const targetMemo = [...updatedMemos, ...updatedPinnedMemos].find(m => m.id === memoId);
+        if (targetMemo) {
+          toast.success(targetMemo.is_public ? '已设为公开' : '已设为私有');
+        }
         break;
   case 'pin':
         const memoToPin = memos.find(memo => memo.id === memoId);
