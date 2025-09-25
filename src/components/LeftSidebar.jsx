@@ -25,7 +25,8 @@ const LeftSidebar = ({
   onDateClick,
   onOpenDailyReview,
   showFavoriteRandomButton,
-  onFavoriteRandomBackground
+  onFavoriteRandomBackground,
+  isAuthenticated = true
 }) => {
   const { darkMode, toggleDarkMode, themeColor } = useTheme();
   const { cloudSyncEnabled } = useSettings();
@@ -147,27 +148,31 @@ const LeftSidebar = ({
           {/* 用户按钮 - 现在总是显示，不再依赖于cloudSyncEnabled */}
           <UserAvatar onOpenSettings={onSettingsOpen} />
 
-          {/* 设置按钮 */}
-          <button
-            onClick={onSettingsOpen}
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 transition-all duration-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-            aria-label="打开设置"
-          >
-            <Settings className="h-5 w-5 transition-transform duration-300 hover:rotate-90" />
-          </button>
+          {/* 设置按钮 - 仅登录用户可见 */}
+          {isAuthenticated && (
+            <button
+              onClick={onSettingsOpen}
+              className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 transition-all duration-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              aria-label="打开设置"
+            >
+              <Settings className="h-5 w-5 transition-transform duration-300 hover:rotate-90" />
+            </button>
+          )}
 
-          {/* 画布模式切换按钮 */}
-          <button
-            onClick={() => setIsCanvasMode(!isCanvasMode)}
-            className={`flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 hover:bg-gray-300 dark:hover:bg-gray-600 ${
-              isCanvasMode 
-                ? 'bg-blue-500 text-white hover:bg-blue-600' 
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-            aria-label={isCanvasMode ? "退出画布模式" : "进入画布模式"}
-          >
-            <Layout className="h-5 w-5 transition-transform duration-300" />
-          </button>
+          {/* 画布模式切换按钮 - 仅登录用户可见 */}
+          {isAuthenticated && (
+            <button
+              onClick={() => setIsCanvasMode(!isCanvasMode)}
+              className={`flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 hover:bg-gray-300 dark:hover:bg-gray-600 ${
+                isCanvasMode
+                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+              aria-label={isCanvasMode ? "退出画布模式" : "进入画布模式"}
+            >
+              <Layout className="h-5 w-5 transition-transform duration-300" />
+            </button>
+          )}
 
           {/* 黑暗模式切换按钮 */}
           <button

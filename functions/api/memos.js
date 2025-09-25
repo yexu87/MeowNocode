@@ -18,18 +18,31 @@ export async function onRequest(context) {
   
   try {
     if (method === 'GET') {
-      // 获取所有memos（不区分用户）
+      const url = new URL(request.url);
+      const publicOnly = url.searchParams.get('public_only') === 'true';
+
+      // 根据参数决定查询条件
+      let query = 'SELECT * FROM memos';
+      let params = [];
+
+      if (publicOnly) {
+        query += ' WHERE is_public = 1';
+      }
+
+      query += ' ORDER BY created_at DESC';
+
       const { results } = await env.DB
-        .prepare('SELECT * FROM memos ORDER BY created_at DESC')
+        .prepare(query)
+        .bind(...params)
         .all();
-      
+
       return new Response(JSON.stringify({ success: true, data: results }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     } else if (method === 'POST') {
       // 创建或更新memo
       const body = await request.json();
-      const { memo_id, content, tags, backlinks, audio_clips, created_at, updated_at } = body;
+      const { memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at } = body;
       
       if (!memo_id || !content) {
         return new Response(JSON.stringify({ error: '缺少必要参数' }), {
@@ -47,12 +60,13 @@ export async function onRequest(context) {
       if (existingMemo) {
         // 更新现有memo
         await env.DB
-          .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, updated_at = ? WHERE memo_id = ?')
+          .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, is_public = ?, updated_at = ? WHERE memo_id = ?')
           .bind(
             content,
             JSON.stringify(tags || []),
             JSON.stringify(backlinks || []),
             JSON.stringify(audio_clips || []),
+            is_public ? 1 : 0,
             updated_at || new Date().toISOString(),
             memo_id
           )
@@ -60,13 +74,14 @@ export async function onRequest(context) {
       } else {
         // 插入新memo
         await env.DB
-          .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
           .bind(
             memo_id,
             content,
             JSON.stringify(tags || []),
             JSON.stringify(backlinks || []),
             JSON.stringify(audio_clips || []),
+            is_public ? 1 : 0,
             created_at || new Date().toISOString(),
             updated_at || new Date().toISOString()
           )

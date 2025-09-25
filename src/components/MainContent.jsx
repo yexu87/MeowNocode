@@ -13,7 +13,7 @@ const MainContent = ({
   setIsRightSidebarHidden,
   isLeftSidebarPinned,
   isRightSidebarPinned,
-  
+
   // Data
   searchQuery,
   setSearchQuery,
@@ -27,12 +27,12 @@ const MainContent = ({
   activeTag,
   activeDate, // 新增日期筛选状态
   showScrollToTop,
-  
+
   // Refs
   searchInputRef,
   memosContainerRef,
   menuRefs,
-  
+
   // Callbacks
   onMobileMenuOpen,
   onAddMemo,
@@ -55,12 +55,14 @@ const MainContent = ({
   allMemos,
   onAddBacklink,
   onPreviewMemo,
-  pendingNewBacklinks
-  , onRemoveBacklink,
+  pendingNewBacklinks,
+  onRemoveBacklink,
   // audio
   onAddAudioClip,
   pendingNewAudioClips,
-  onRemoveAudioClip
+  onRemoveAudioClip,
+  // 认证状态
+  isAuthenticated = true
 }) => {
   const { themeColor } = useTheme();
 
@@ -90,15 +92,17 @@ const MainContent = ({
         onAddMemo={onAddMemo}
         onEditorFocus={onEditorFocus}
         onEditorBlur={onEditorBlur}
-  // backlinks for input editor (new memo has no id; only provide memos list)
-  allMemos={allMemos}
-  onAddBacklink={onAddBacklink}
-  onPreviewMemo={onPreviewMemo}
-  pendingNewBacklinks={pendingNewBacklinks}
-  onRemoveBacklink={onRemoveBacklink}
-  onAddAudioClip={onAddAudioClip}
-  audioClips={pendingNewAudioClips}
-  onRemoveAudioClip={onRemoveAudioClip}
+        // backlinks for input editor (new memo has no id; only provide memos list)
+        allMemos={allMemos}
+        onAddBacklink={onAddBacklink}
+        onPreviewMemo={onPreviewMemo}
+        pendingNewBacklinks={pendingNewBacklinks}
+        onRemoveBacklink={onRemoveBacklink}
+        onAddAudioClip={onAddAudioClip}
+        audioClips={pendingNewAudioClips}
+        onRemoveAudioClip={onRemoveAudioClip}
+        // 认证状态
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Memos列表 */}
@@ -123,13 +127,15 @@ const MainContent = ({
         onTagClick={onTagClick}
         onScrollToTop={onScrollToTop}
         clearFilters={clearFilters} // 传递清除筛选函数
-  // backlinks for memo cards
-  allMemos={allMemos}
-  onAddBacklink={onAddBacklink}
-  onPreviewMemo={onPreviewMemo}
-  onRemoveBacklink={onRemoveBacklink}
-  onAddAudioClip={onAddAudioClip}
-  onRemoveAudioClip={onRemoveAudioClip}
+        // backlinks for memo cards
+        allMemos={allMemos}
+        onAddBacklink={onAddBacklink}
+        onPreviewMemo={onPreviewMemo}
+        onRemoveBacklink={onRemoveBacklink}
+        onAddAudioClip={onAddAudioClip}
+        onRemoveAudioClip={onRemoveAudioClip}
+        // 认证状态
+        isAuthenticated={isAuthenticated}
       />
     </div>
   );
