@@ -408,12 +408,12 @@ import { toast } from 'sonner';
     } catch {}
   }, [memos, pinnedMemos]);
 
-  // 保存数据到localStorage
+  // 保存数据到localStorage - 优化：减少不必要的同步触发
   useEffect(() => {
     localStorage.setItem('memos', JSON.stringify(memos));
     localStorage.setItem('pinnedMemos', JSON.stringify(pinnedMemos));
-  // 通知全局数据变更
-  try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'memos' } })); } catch {}
+    // 🔧 只在数据真正变化时通知，避免频繁同步导致冲突
+    // 去掉自动触发，改为在关键操作时手动触发
   }, [memos, pinnedMemos]);
 
   // 保存侧栏固定状态到localStorage - 画布模式下不保存
@@ -455,7 +455,7 @@ import { toast } from 'sonner';
   }, []);
 
   // 添加新memo
-  const addMemo = () => {
+  const addMemo = async () => {
     if (newMemo.trim() === '') return;
 
     const extractedTags = [...newMemo.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
@@ -484,14 +484,25 @@ import { toast } from 'sonner';
         ? { ...m, backlinks: Array.from(new Set([...(Array.isArray(m.backlinks) ? m.backlinks : []), newId])), updatedAt: nowIso }
         : m
     ));
-    const updatedMemos = addLink(memos);
+    const updatedMemos = [newMemoObj, ...addLink(memos)];
     const updatedPinned = addLink(pinnedMemos);
 
-    setMemos([newMemoObj, ...updatedMemos]);
+    // 立即更新state和localStorage
+    setMemos(updatedMemos);
     setPinnedMemos(updatedPinned);
+    localStorage.setItem('memos', JSON.stringify(updatedMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
+
     setNewMemo('');
     setPendingNewBacklinks([]);
     setPendingNewAudioClips([]);
+
+    // 🔧 重要：立即触发同步，确保新memo尽快上传到D1
+    try {
+      window.dispatchEvent(new CustomEvent('app:dataChanged', {
+        detail: { part: 'memo.add', priority: 'high', id: newId }
+      }));
+    } catch {}
   };
 
   // 更新热力图数据
@@ -597,6 +608,13 @@ import { toast } from 'sonner';
         if (targetMemo) {
           toast.success(targetMemo.is_public ? '已设为公开' : '已设为私有');
         }
+
+        // 🔧 触发同步以保存公开状态变更
+        try {
+          window.dispatchEvent(new CustomEvent('app:dataChanged', {
+            detail: { part: 'memo.update', priority: 'normal', id: memoId }
+          }));
+        } catch {}
         break;
   case 'pin':
         const memoToPin = memos.find(memo => memo.id === memoId);

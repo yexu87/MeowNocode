@@ -87,7 +87,26 @@ export function SettingsProvider({ children }) {
   const doSync = React.useCallback(async () => {
     if (!cloudSyncEnabled) return;
     if (syncingRef.current) { pendingRef.current = true; return; }
+
+    // 🔧 添加同步节流，避免频繁冲突
+    const now = Date.now();
+    const minInterval = 5000; // 最小5秒间隔
+    if (now - lastSyncAtRef.current < minInterval) {
+      // 太频繁，稍后重试
+      if (!pendingRef.current) {
+        pendingRef.current = true;
+        setTimeout(() => {
+          if (pendingRef.current) {
+            pendingRef.current = false;
+            doSync();
+          }
+        }, minInterval - (now - lastSyncAtRef.current));
+      }
+      return;
+    }
+
     syncingRef.current = true;
+    lastSyncAtRef.current = now;
     try {
   // 先下行：拉取远端，根据 lastCloudSyncAt 处理“远端删除”，避免本地旧数据回写导致复活
       const providerSyncKey = (p) => `lastCloudSyncAt:${p}`;
@@ -161,13 +180,28 @@ export function SettingsProvider({ children }) {
           }
           const lRaw = m.updatedAt || m.lastModified || m.timestamp || m.createdAt || null;
           const lTime = lRaw ? new Date(lRaw).getTime() : NaN;
-          if (!Number.isFinite(lTime) || lastSyncAt === 0 || lTime > lastSyncAt) {
-            // 本地更新（可能离线新增/编辑），保留，待上行
-            keptLocal.push(m);
+
+          // 🔧 修复：更保守的删除策略，避免误删新memo
+          // 只有在以下条件ALL满足时才删除：
+          // 1. 有有效的同步时间记录 (lastSyncAt > 0)
+          // 2. 本地memo有有效时间戳
+          // 3. 本地memo创建时间明显早于最后同步时间(至少30秒)
+          // 4. 本地memo更新时间也早于最后同步时间
+          if (lastSyncAt > 0 && Number.isFinite(lTime)) {
+            const createdTime = new Date(m.createdAt || m.timestamp || lRaw).getTime();
+            const timeSinceSync = lastSyncAt - Math.max(lTime, createdTime);
+
+            // 只删除明显是"旧数据且远端已删"的memo (30秒缓冲)
+            if (timeSinceSync > 30000) {
+              removedIds.push(id);
+              changed = true;
+            } else {
+              // 疑似新memo或时间接近，保守保留，待下次同步确认
+              keptLocal.push(m);
+            }
           } else {
-            // 远端删除，移除本地，避免“复活”
-            removedIds.push(id);
-            changed = true;
+            // 没有同步基准或时间信息不完整，保守保留
+            keptLocal.push(m);
           }
         }
 
