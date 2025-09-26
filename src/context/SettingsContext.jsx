@@ -80,6 +80,80 @@ export function SettingsProvider({ children }) {
   const pendingRef = React.useRef(false);
   const lastSyncAtRef = React.useRef(0);
 
+  // 游客模式数据刷新逻辑
+  const refreshPublicData = React.useCallback(async () => {
+    if (isAuthenticated) return; // 只在游客模式下执行
+
+    try {
+      let res;
+      try {
+        // 优先使用API获取公开数据
+        res = await D1ApiClient.getPublicData();
+      } catch (apiError) {
+        console.warn('API获取公开数据失败，尝试直接数据库访问:', apiError);
+        // API失败时降级到直接数据库访问
+        const dbMemos = await D1DatabaseService.getPublicMemos();
+        res = {
+          success: true,
+          data: { memos: dbMemos }
+        };
+      }
+
+      if (res?.success && res.data?.memos) {
+        const currentMemos = JSON.parse(localStorage.getItem('memos') || '[]');
+        const newMemos = res.data.memos.map(memo => ({
+          id: memo.memo_id,
+          content: memo.content,
+          tags: JSON.parse(memo.tags || '[]'),
+          backlinks: JSON.parse(memo.backlinks || '[]'),
+          audioClips: JSON.parse(memo.audio_clips || '[]'),
+          is_public: memo.is_public ? true : false,
+          timestamp: memo.created_at,
+          lastModified: memo.updated_at,
+          createdAt: memo.created_at,
+          updatedAt: memo.updated_at
+        }));
+
+        // 检查是否有新数据
+        const currentIds = new Set(currentMemos.map(m => m.id));
+        const newIds = new Set(newMemos.map(m => m.id));
+        const hasNewData = newMemos.length !== currentMemos.length ||
+          !Array.from(newIds).every(id => currentIds.has(id));
+
+        if (hasNewData) {
+          localStorage.setItem('memos', JSON.stringify(newMemos));
+          try {
+            window.dispatchEvent(new CustomEvent('app:dataChanged', {
+              detail: { part: 'guest.refresh', newCount: newMemos.length - currentMemos.length }
+            }));
+          } catch {}
+        }
+      }
+    } catch (error) {
+      console.error('刷新公开数据失败:', error);
+    }
+  }, [isAuthenticated]);
+
+  // 游客模式定期刷新
+  useEffect(() => {
+    if (isAuthenticated) return; // 只在游客模式下执行
+
+    // 立即检查一次
+    refreshPublicData();
+
+    // 设置定期刷新 (每2分钟)
+    const interval = setInterval(refreshPublicData, 2 * 60 * 1000);
+
+    // 页面获得焦点时也刷新一次
+    const onFocus = () => refreshPublicData();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [isAuthenticated, refreshPublicData]);
+
   const dispatchDataChanged = (detail = {}) => {
     try {
       window.dispatchEvent(new CustomEvent('app:dataChanged', { detail }));
@@ -1233,7 +1307,9 @@ export function SettingsProvider({ children }) {
       s3Config,
       updateS3Config: setS3Config,
   // Sync public helpers
-  _scheduleCloudSync: scheduleSync
+  _scheduleCloudSync: scheduleSync,
+  // 游客模式刷新功能
+  refreshPublicData
     }}>
       {children}
     </SettingsContext.Provider>
