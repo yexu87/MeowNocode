@@ -14,6 +14,7 @@ export function PasswordAuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [requiresAuth, setRequiresAuth] = useState(false);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
 
   // 检查是否需要密码认证
   const checkAuthRequirement = async () => {
@@ -119,6 +120,16 @@ export function PasswordAuthProvider({ children }) {
     }
   };
 
+  // 显示登录对话框
+  const showLogin = () => {
+    setShowLoginDialog(true);
+  };
+
+  // 隐藏登录对话框
+  const hideLogin = () => {
+    setShowLoginDialog(false);
+  };
+
   // 退出登录
   const logout = () => {
     setIsAuthenticated(false);
@@ -138,6 +149,9 @@ export function PasswordAuthProvider({ children }) {
     requiresAuth,
     login,
     logout,
+    showLogin,
+    hideLogin,
+    showLoginDialog,
   };
 
   return (
