@@ -7,7 +7,6 @@ import { navItems } from "./nav-items";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { MusicProvider } from "@/context/MusicContext";
-import { AuthProvider } from "@/context/AuthContext";
 import { PasswordAuthProvider, usePasswordAuth } from "@/context/PasswordAuthContext";
 import Login from "@/pages/Login";
 import LoginDialog from "@/components/LoginDialog";
@@ -51,18 +50,16 @@ const AppContent = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <PasswordAuthProvider>
-      <AuthProvider>
-        <ThemeProvider>
-          <SettingsProvider>
-            <MusicProvider>
-              <TooltipProvider>
-                <Toaster />
-                <AppContent />
-              </TooltipProvider>
-            </MusicProvider>
-          </SettingsProvider>
-        </ThemeProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <SettingsProvider>
+          <MusicProvider>
+            <TooltipProvider>
+              <Toaster />
+              <AppContent />
+            </TooltipProvider>
+          </MusicProvider>
+        </SettingsProvider>
+      </ThemeProvider>
     </PasswordAuthProvider>
   </QueryClientProvider>
 );

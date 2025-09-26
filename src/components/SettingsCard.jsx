@@ -7,7 +7,7 @@ import { Slider } from '@/components/ui/slider';
 import { X, Palette, Download, Upload, AlertCircle, CheckCircle, Settings, Database, ChevronDown, ChevronUp, Check, Image as ImageIcon, Github, Cloud, Server, Key, Bot, Keyboard, Star, Music2, Type, Quote } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useSettings } from '@/context/SettingsContext';
-import { useAuth } from '@/context/AuthContext';
+import { usePasswordAuth } from '@/context/PasswordAuthContext';
 import { D1ApiClient } from '@/lib/d1-api';
 import ImageUpload from './ImageUpload';
 import { toast } from 'sonner';
@@ -30,8 +30,6 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     cloudSyncEnabled = false,
     updateCloudSyncEnabled = () => {},
     manualSync = async () => ({ success: false, message: 'unavailable' }),
-    cloudProvider = 'supabase',
-    updateCloudProvider = () => {},
     aiConfig = { enabled: false, baseUrl: '', model: '', apiKey: '' },
     updateAiConfig = () => {},
     keyboardShortcuts = { toggleSidebar: 'Ctrl+B', openAIDialog: 'Ctrl+K', openSettings: 'Ctrl+,', toggleCanvasMode: 'Ctrl+Shift+C', openDailyReview: 'Ctrl+R' },
@@ -42,7 +40,7 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     s3Config = { enabled: false },
     updateS3Config = () => {},
   } = settingsCtx;
-  const { user, isAuthenticated, loginWithGitHub } = useAuth();
+  const { isAuthenticated } = usePasswordAuth();
   const [tempColor, setTempColor] = useState(themeColor);
   const [activeTab, setActiveTab] = useState('general');
 
@@ -119,15 +117,10 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
 
 
 
-  // 统一“手动同步”处理函数：三向合并 + 删除墓碑
+  // 统一"手动同步"处理函数：三向合并 + 删除墓碑
   const handleManualSync = async () => {
     setIsSyncing(true);
     try {
-      if (cloudProvider === 'supabase' && !isAuthenticated) {
-        toast.error('请先登录GitHub账号');
-        setIsSyncing(false);
-        return;
-      }
       const result = await manualSync();
       if (result.success) toast.success(result.message);
       else toast.error(result.message);
@@ -138,25 +131,7 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     }
   };
 
-  const handleCloudProviderChange = (provider) => {
-    try {
-      updateCloudProvider(provider);
-    } catch (error) {
-      console.error('切换云服务提供商失败:', error);
-      toast.error('切换云服务提供商失败');
-    }
-  };
 
-  const handleGitHubLogin = async () => {
-    try {
-      const result = await loginWithGitHub();
-      if (!result.success) {
-        toast.error(result.error);
-      }
-    } catch (error) {
-      toast.error('登录失败');
-    }
-  };
 
 
   const handleExportLocalData = () => {
@@ -1488,122 +1463,46 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
 
                 {cloudSyncEnabled && (
                   <>
-                    {/* 云服务提供商选择 */}
+                    {/* 云同步配置 */}
                     <div className="space-y-3">
-                      <Label className="text-sm font-medium">选择云服务提供商</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => handleCloudProviderChange('supabase')}
-                          className={`p-3 rounded-lg border-2 transition-colors ${
-                            cloudProvider === 'supabase'
-                              ? 'border-current bg-current/10'
-                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                          }`}
-                          style={cloudProvider === 'supabase' ? { borderColor: themeColor } : {}}
-                        >
-                          <div className="flex flex-col items-center space-y-1">
-                            <Cloud className="h-6 w-6" style={cloudProvider === 'supabase' ? { color: themeColor } : {}} />
-                            <span className="text-xs font-medium">Supabase</span>
+                      <Label className="text-sm font-medium">云同步配置 (Cloudflare D1)</Label>
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center space-x-3">
+                          <Server className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              Cloudflare D1 数据库
+                            </p>
+                            <p className="text-xs text-gray-700 dark:text-gray-300">
+                              数据将自动同步到Cloudflare D1数据库
+                            </p>
                           </div>
-                        </button>
-                        <button
-                          onClick={() => handleCloudProviderChange('d1')}
-                          className={`p-3 rounded-lg border-2 transition-colors relative ${
-                            cloudProvider === 'd1'
-                              ? 'border-current bg-current/10'
-                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                          }`}
-                          style={cloudProvider === 'd1' ? { borderColor: themeColor } : {}}
-                          title="Cloudflare D1 数据库"
-                        >
-                          <div className="flex flex-col items-center space-y-1">
-                            <Server className="h-6 w-6" style={cloudProvider === 'd1' ? { color: themeColor } : {}} />
-                            <span className="text-xs font-medium">Cloudflare D1</span>
-                          </div>
-                        </button>
+                        </div>
                       </div>
                     </div>
-
-                    {/* 根据选择的提供商显示不同的登录和同步选项 */}
-                    {cloudProvider === 'supabase' && (
-                      <>
-                        {!isAuthenticated ? (
-                          <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                            <div className="flex items-center space-x-3">
-                              <Github className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                                  登录GitHub账号
-                                </p>
-                                <p className="text-xs text-blue-700 dark:text-blue-300">
-                                  登录后可以将数据同步到Supabase，在不同设备间保持数据一致
-                                </p>
-                              </div>
-                              <Button
-                                onClick={handleGitHubLogin}
-                                size="sm"
-                                className="bg-blue-600 hover:bg-blue-700"
-                              >
-                                <Github className="h-4 w-4 mr-2" />
-                                登录
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                              <div className="flex items-center space-x-2">
-                                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                <span className="text-sm text-green-800 dark:text-green-200">
-                                  已登录: {user?.user_metadata?.user_name || user?.email}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex space-x-2">
-                              <Button
-                                onClick={handleManualSync}
-                                disabled={isSyncing}
-                                size="sm"
-                                className="flex-1"
-                                style={{ backgroundColor: themeColor }}
-                              >
-                                <Upload className="h-4 w-4 mr-2" />
-                                {isSyncing ? '同步中...' : '手动同步'}
-                              </Button>
-                              
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {cloudProvider === 'd1' && (
-                      <div className="space-y-3">
-                        <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                          <div className="flex items-center space-x-2">
-                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="text-sm text-green-800 dark:text-green-200">
-                              已连接到 Cloudflare D1 数据库
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex space-x-2">
-                          <Button
-                            onClick={handleManualSync}
-                            disabled={isSyncing}
-                            size="sm"
-                            className="flex-1"
-                            style={{ backgroundColor: themeColor }}
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            {isSyncing ? '同步中...' : '手动同步'}
-                          </Button>
-                          
+                    <div className="space-y-3">
+                      <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          <span className="text-sm text-green-800 dark:text-green-200">
+                            已连接到 Cloudflare D1 数据库
+                          </span>
                         </div>
                       </div>
-                    )}
+
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={handleManualSync}
+                          disabled={isSyncing}
+                          size="sm"
+                          className="flex-1"
+                          style={{ backgroundColor: themeColor }}
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          {isSyncing ? '同步中...' : '手动同步'}
+                        </Button>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>

@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LogOut, LogIn, User, Settings as SettingsIcon } from 'lucide-react';
 import { usePasswordAuth } from '@/context/PasswordAuthContext';
-import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 const UserAvatar = ({ onOpenSettings }) => {
   const { isAuthenticated, requiresAuth, logout, showLogin } = usePasswordAuth();
-  const { user, getUserAvatarUrl, getUserDisplayName } = useAuth();
   const { cloudSyncEnabled, avatarConfig } = useSettings();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -38,27 +36,19 @@ const UserAvatar = ({ onOpenSettings }) => {
     }
   };
 
-  // 获取头像URL的优先级：自定义头像 > GitHub头像 > 默认头像
+  // 获取头像URL的优先级：自定义头像 > 默认头像
   const getAvatarUrl = () => {
     // 优先使用用户设置的自定义头像
     if (avatarConfig && avatarConfig.imageUrl) {
       return avatarConfig.imageUrl;
     }
-    
-    // 如果用户已通过GitHub登录，使用GitHub头像
-    if (user && getUserAvatarUrl()) {
-      return getUserAvatarUrl();
-    }
-    
+
     // 默认返回null，显示默认图标
     return null;
   };
 
   // 获取显示名称
   const getDisplayName = () => {
-    if (user && getUserDisplayName()) {
-      return getUserDisplayName();
-    }
     return isAuthenticated ? "已登录" : "访客";
   };
 
@@ -160,7 +150,7 @@ const UserAvatar = ({ onOpenSettings }) => {
                   {getDisplayName()}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 break-words">
-                  {user?.email || (requiresAuth && isAuthenticated ? "密码认证" : "无需认证")}
+                  {requiresAuth && isAuthenticated ? "密码认证" : "无需认证"}
                 </p>
               </div>
             </div>
