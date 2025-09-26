@@ -85,25 +85,27 @@ const MainContent = ({
   onOpenMusicSearch={onOpenMusicSearch}
       />
 
-      {/* 编辑区域 */}
-      <MemoInput
-        newMemo={newMemo}
-        setNewMemo={setNewMemo}
-        onAddMemo={onAddMemo}
-        onEditorFocus={onEditorFocus}
-        onEditorBlur={onEditorBlur}
-        // backlinks for input editor (new memo has no id; only provide memos list)
-        allMemos={allMemos}
-        onAddBacklink={onAddBacklink}
-        onPreviewMemo={onPreviewMemo}
-        pendingNewBacklinks={pendingNewBacklinks}
-        onRemoveBacklink={onRemoveBacklink}
-        onAddAudioClip={onAddAudioClip}
-        audioClips={pendingNewAudioClips}
-        onRemoveAudioClip={onRemoveAudioClip}
-        // 认证状态
-        isAuthenticated={isAuthenticated}
-      />
+      {/* 编辑区域 - 只在已认证时显示 */}
+      {isAuthenticated && (
+        <MemoInput
+          newMemo={newMemo}
+          setNewMemo={setNewMemo}
+          onAddMemo={onAddMemo}
+          onEditorFocus={onEditorFocus}
+          onEditorBlur={onEditorBlur}
+          // backlinks for input editor (new memo has no id; only provide memos list)
+          allMemos={allMemos}
+          onAddBacklink={onAddBacklink}
+          onPreviewMemo={onPreviewMemo}
+          pendingNewBacklinks={pendingNewBacklinks}
+          onRemoveBacklink={onRemoveBacklink}
+          onAddAudioClip={onAddAudioClip}
+          audioClips={pendingNewAudioClips}
+          onRemoveAudioClip={onRemoveAudioClip}
+          // 认证状态
+          isAuthenticated={isAuthenticated}
+        />
+      )}
 
       {/* Memos列表 */}
       <MemoList

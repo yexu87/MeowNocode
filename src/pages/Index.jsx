@@ -511,29 +511,35 @@ import { toast } from 'sonner';
       const data = [];
       const today = new Date();
       const memoCountByDate = {};
-      
-      [...memos, ...pinnedMemos].forEach(memo => {
+
+      // 获取要统计的memo：认证用户统计全部，游客只统计公开memo
+      let memosToCount = [...memos, ...pinnedMemos];
+      if (!isAuthenticated) {
+        memosToCount = memosToCount.filter(memo => memo.is_public);
+      }
+
+      memosToCount.forEach(memo => {
         const createdAt = memo.createdAt || memo.timestamp || new Date().toISOString();
         const date = createdAt.split('T')[0];
         memoCountByDate[date] = (memoCountByDate[date] || 0) + 1;
       });
-      
+
       for (let i = 0; i < 365; i++) {
         const date = new Date(today);
         date.setDate(today.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         data.push({
           date: dateStr,
           count: memoCountByDate[dateStr] || 0
         });
       }
-      
+
       return data;
     };
-    
+
     setHeatmapData(generateHeatmapData());
-  }, [memos, pinnedMemos]);
+  }, [memos, pinnedMemos, isAuthenticated]); // 添加isAuthenticated依赖
 
   // 统一筛选：标签 / 日期 / 搜索 / 认证状态
   useEffect(() => {
@@ -1329,8 +1335,8 @@ import { toast } from 'sonner';
         {/* 左侧热力图区域 */}
         <LeftSidebar
           heatmapData={heatmapData}
-          memos={memos}
-          pinnedMemos={pinnedMemos}
+          memos={isAuthenticated ? memos : memos.filter(memo => memo.is_public)}
+          pinnedMemos={isAuthenticated ? pinnedMemos : pinnedMemos.filter(memo => memo.is_public)}
           isLeftSidebarHidden={isLeftSidebarHidden}
           setIsLeftSidebarHidden={setIsLeftSidebarHidden}
           isLeftSidebarPinned={isLeftSidebarPinned}
@@ -1447,7 +1453,7 @@ import { toast } from 'sonner';
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
         heatmapData={heatmapData}
-        memos={[...memos, ...pinnedMemos]}
+        memos={isAuthenticated ? [...memos, ...pinnedMemos] : [...memos, ...pinnedMemos].filter(memo => memo.is_public)}
         activeTag={activeTag}
         setActiveTag={(tag) => { setActiveTag(tag); setActiveDate(null); }}
         onSettingsOpen={() => setIsSettingsOpen(true)}
