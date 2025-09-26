@@ -265,6 +265,17 @@ export class D1DatabaseService {
       .run();
   }
 
+  // 获取公开memo（游客模式使用）
+  static async getPublicMemos() {
+    const db = await this.getDB();
+
+    const { results } = await db
+      .prepare('SELECT * FROM memos WHERE is_public = 1 ORDER BY created_at DESC')
+      .all();
+
+    return results || [];
+  }
+
   // 获取所有memos
   static async getAllMemos() {
     const db = await this.getDB();

@@ -3,6 +3,7 @@ import { DatabaseService } from '@/lib/database';
 import { D1DatabaseService } from '@/lib/d1';
 import { D1ApiClient } from '@/lib/d1-api';
 import { useAuth } from './AuthContext';
+import { usePasswordAuth } from './PasswordAuthContext';
 import { getDeletedMemoTombstones, removeDeletedMemoTombstones } from '@/lib/utils';
 import largeFileStorage from '@/lib/largeFileStorage';
 import { toast } from 'sonner';
@@ -15,6 +16,7 @@ export function useSettings() {
 
 export function SettingsProvider({ children }) {
   const { user } = useAuth();
+  const { isAuthenticated } = usePasswordAuth();
   const [hitokotoConfig, setHitokotoConfig] = useState({
     enabled: true,
     types: ['a', 'b', 'c', 'd', 'i', 'j', 'k'] // 默认全部类型
@@ -647,40 +649,98 @@ export function SettingsProvider({ children }) {
     };
   }, [cloudSyncEnabled, scheduleSync, doSync]);
 
-  // Try restore on startup (even if cloud sync disabled) when local is empty
+  // Try restore on startup when local is empty (for both authenticated and guest users)
   useEffect(() => {
     const maybeRestore = async () => {
       try {
         const memos = JSON.parse(localStorage.getItem('memos') || '[]');
         const pinned = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
         const hasLocal = (Array.isArray(memos) && memos.length > 0) || (Array.isArray(pinned) && pinned.length > 0);
+
         if (hasLocal) {
           // 仍执行一次快速同步，保证远端覆盖当前设备
           if (cloudSyncEnabled) scheduleSync('startup');
           return;
         }
-        if (cloudProvider === 'supabase') {
-          if (!user) return; // need auth to restore
-          await DatabaseService.restoreUserData(user.id);
-          try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'restore.supabase' } })); } catch {}
-        } else {
+
+        // 简化逻辑：只使用D1，移除Supabase复杂判断
+        // 对于游客模式，获取公开数据；对于认证用户，获取全部数据
+        try {
+          let res;
+          if (!isAuthenticated) {
+            // 游客模式：只获取公开数据
+            res = await D1ApiClient.getPublicData();
+          } else {
+            // 认证用户：获取全部数据
+            res = await D1ApiClient.restoreUserData();
+          }
+
+          if (!res?.success) throw new Error('API restore failed');
+
+          // 恢复memos数据
+          if (res.data?.memos && res.data.memos.length > 0) {
+            const localMemos = res.data.memos.map(memo => ({
+              id: memo.memo_id,
+              content: memo.content,
+              tags: JSON.parse(memo.tags || '[]'),
+              backlinks: JSON.parse(memo.backlinks || '[]'),
+              audioClips: JSON.parse(memo.audio_clips || '[]'),
+              is_public: memo.is_public ? true : false,
+              timestamp: memo.created_at,
+              lastModified: memo.updated_at,
+              createdAt: memo.created_at,
+              updatedAt: memo.updated_at
+            }));
+            localStorage.setItem('memos', JSON.stringify(localMemos));
+          }
+
+          try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'restore.d1.api' } })); } catch {}
+        } catch (apiError) {
+          console.warn('D1 API客户端失败，尝试直接访问D1数据库', apiError);
+
           try {
-            const res = await D1ApiClient.restoreUserData();
-            if (!res?.success) throw new Error('restore via API failed');
-            try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'restore.d1.api' } })); } catch {}
-          } catch (_) {
-            await D1DatabaseService.restoreUserData();
+            let dbMemos;
+            if (!isAuthenticated) {
+              // 游客模式：只获取公开memo
+              dbMemos = await D1DatabaseService.getPublicMemos();
+            } else {
+              // 认证用户：获取全部memo
+              dbMemos = await D1DatabaseService.getAllMemos();
+            }
+
+            if (dbMemos && dbMemos.length > 0) {
+              const localMemos = dbMemos.map(memo => ({
+                id: memo.memo_id,
+                content: memo.content,
+                tags: JSON.parse(memo.tags || '[]'),
+                backlinks: JSON.parse(memo.backlinks || '[]'),
+                audioClips: JSON.parse(memo.audio_clips || '[]'),
+                is_public: memo.is_public ? true : false,
+                timestamp: memo.created_at,
+                lastModified: memo.updated_at,
+                createdAt: memo.created_at,
+                updatedAt: memo.updated_at
+              }));
+              localStorage.setItem('memos', JSON.stringify(localMemos));
+            }
+
             try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'restore.d1.db' } })); } catch {}
+          } catch (dbError) {
+            console.error('D1数据库直接访问也失败:', dbError);
           }
         }
-        // after restore, schedule a push to ensure any local-only fields are upserted formats
-        if (cloudSyncEnabled) scheduleSync('post-restore');
+
+        // 认证用户才需要同步推送
+        if (isAuthenticated && cloudSyncEnabled) {
+          scheduleSync('post-restore');
+        }
       } catch (e) {
-        // ignore in auto flow
+        console.error('数据恢复失败:', e);
       }
     };
+
     maybeRestore();
-  }, [cloudSyncEnabled, cloudProvider, user, scheduleSync]);
+  }, [isAuthenticated, scheduleSync, cloudSyncEnabled]); // 添加isAuthenticated依赖
 
   // 统一“手动同步”流程：远端 -> 本地 合并 -> 上行
   const manualSync = async () => {
