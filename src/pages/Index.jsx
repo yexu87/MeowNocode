@@ -74,7 +74,7 @@ import { toast } from 'sonner';
   const memosContainerRef = useRef(null);
 
   // Context
-  const { backgroundConfig, updateBackgroundConfig, aiConfig, keyboardShortcuts, musicConfig } = useSettings();
+  const { backgroundConfig, updateBackgroundConfig, aiConfig, keyboardShortcuts, musicConfig, _scheduleCloudSync } = useSettings();
   const { isAuthenticated } = usePasswordAuth();
   const [currentRandomBgUrl, setCurrentRandomBgUrl] = useState('');
 
@@ -498,6 +498,14 @@ import { toast } from 'sonner';
     setPendingNewAudioClips([]);
 
     // 🔧 重要：立即触发同步，确保新memo尽快上传到D1
+    if (isAuthenticated && _scheduleCloudSync) {
+      try {
+        _scheduleCloudSync('memo-add');
+      } catch (error) {
+        console.warn('新增memo立即同步失败:', error);
+      }
+    }
+
     try {
       window.dispatchEvent(new CustomEvent('app:dataChanged', {
         detail: { part: 'memo.add', priority: 'high', id: newId }
@@ -615,10 +623,18 @@ import { toast } from 'sonner';
           toast.success(targetMemo.is_public ? '已设为公开' : '已设为私有');
         }
 
-        // 🔧 触发同步以保存公开状态变更
+        // 🔧 触发立即同步以保存公开状态变更
+        if (isAuthenticated && _scheduleCloudSync) {
+          try {
+            _scheduleCloudSync('public-status-change');
+          } catch (error) {
+            console.warn('立即同步失败:', error);
+          }
+        }
+
         try {
           window.dispatchEvent(new CustomEvent('app:dataChanged', {
-            detail: { part: 'memo.update', priority: 'normal', id: memoId }
+            detail: { part: 'memo.update', priority: 'high', id: memoId }
           }));
         } catch {}
         break;

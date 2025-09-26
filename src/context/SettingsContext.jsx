@@ -732,8 +732,12 @@ export function SettingsProvider({ children }) {
         const hasLocal = (Array.isArray(memos) && memos.length > 0) || (Array.isArray(pinned) && pinned.length > 0);
 
         if (hasLocal) {
-          // 仍执行一次快速同步，保证远端覆盖当前设备
-          if (cloudSyncEnabled) scheduleSync('startup');
+          // 🔧 修复：本地有数据时不要被远端无条件覆盖
+          // 而是进行智能合并，保留本地更新的数据
+          if (isAuthenticated && cloudSyncEnabled) {
+            // 对于认证用户，执行合并同步而不是覆盖同步
+            scheduleSync('startup-merge');
+          }
           return;
         }
 
