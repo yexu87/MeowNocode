@@ -132,6 +132,7 @@ export class D1ApiClient {
           tags: memo.tags || [],
           backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
           audio_clips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
+          is_public: memo.is_public ? 1 : 0, // 🔧 添加is_public字段
           created_at: createdAt,
           updated_at: updatedAt
         }),

@@ -126,6 +126,7 @@ export function SettingsProvider({ children }) {
               tags: JSON.parse(m.tags || '[]'),
               backlinks: JSON.parse(m.backlinks || '[]'),
               audio_clips: JSON.parse(m.audio_clips || '[]'),
+              is_public: m.is_public ? true : false, // 🔧 添加is_public字段映射
               created_at: m.created_at,
               updated_at: m.updated_at
             }));
@@ -141,6 +142,7 @@ export function SettingsProvider({ children }) {
               tags: JSON.parse(m.tags || '[]'),
               backlinks: JSON.parse(m.backlinks || '[]'),
               audio_clips: JSON.parse(m.audio_clips || '[]'),
+              is_public: m.is_public ? true : false, // 🔧 添加is_public字段映射
               created_at: m.created_at,
               updated_at: m.updated_at
             }));
@@ -225,6 +227,7 @@ export function SettingsProvider({ children }) {
                 tags: cm.tags || [],
                 backlinks: cm.backlinks || [],
                 audioClips: cm.audio_clips || pm.audioClips || [],
+                is_public: cm.is_public ? true : false, // 🔧 添加is_public字段映射
                 updatedAt: cm.updated_at,
                 lastModified: cm.updated_at
               });
@@ -243,6 +246,7 @@ export function SettingsProvider({ children }) {
               tags: cm.tags || [],
               backlinks: cm.backlinks || [],
               audioClips: Array.isArray(cm.audio_clips) ? cm.audio_clips : [],
+              is_public: cm.is_public ? true : false, // 🔧 添加is_public字段映射
               createdAt: cm.created_at,
               updatedAt: cm.updated_at,
               timestamp: cm.created_at,
@@ -259,6 +263,7 @@ export function SettingsProvider({ children }) {
                 tags: cm.tags || [],
                 backlinks: cm.backlinks || [],
                 audioClips: Array.isArray(cm.audio_clips) ? cm.audio_clips : (Array.isArray(lm.audioClips) ? lm.audioClips : []),
+                is_public: cm.is_public ? true : false, // 🔧 添加is_public字段映射
                 updatedAt: cm.updated_at,
                 lastModified: cm.updated_at
               });
@@ -271,7 +276,8 @@ export function SettingsProvider({ children }) {
           const merged = Array.from(mergedById.values()).map(m => ({
             ...m,
             backlinks: Array.isArray(m.backlinks) ? m.backlinks : [],
-            audioClips: Array.isArray(m.audioClips) ? m.audioClips : []
+            audioClips: Array.isArray(m.audioClips) ? m.audioClips : [],
+            is_public: typeof m.is_public === 'boolean' ? m.is_public : false // 🔧 确保is_public字段一致性
           })).sort((a, b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0));
           localStorage.setItem('memos', JSON.stringify(merged));
           if (removedIds.length && Array.isArray(pinned)) {

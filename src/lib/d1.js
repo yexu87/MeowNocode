@@ -110,6 +110,7 @@ export class D1DatabaseService {
           tags: JSON.parse(memo.tags || '[]'),
           backlinks: JSON.parse(memo.backlinks || '[]'),
           audioClips: JSON.parse(memo.audio_clips || '[]'),
+          is_public: memo.is_public ? true : false, // 🔧 添加is_public字段映射
           timestamp: memo.created_at,
           lastModified: memo.updated_at,
           createdAt: memo.created_at,
@@ -176,12 +177,13 @@ export class D1DatabaseService {
     if (existingMemo) {
       // 更新现有memo
       await db
-        .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, updated_at = ? WHERE memo_id = ?')
+        .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, is_public = ?, updated_at = ? WHERE memo_id = ?')
         .bind(
           memo.content,
           JSON.stringify(memo.tags || []),
           JSON.stringify(Array.isArray(memo.backlinks) ? memo.backlinks : []),
           JSON.stringify(Array.isArray(memo.audioClips) ? memo.audioClips : []),
+          memo.is_public ? 1 : 0, // 🔧 添加is_public字段
           updatedAt,
           memo.id
         )
@@ -189,13 +191,14 @@ export class D1DatabaseService {
     } else {
       // 插入新memo
       await db
-        .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(
           memo.id,
           memo.content,
           JSON.stringify(memo.tags || []),
           JSON.stringify(Array.isArray(memo.backlinks) ? memo.backlinks : []),
           JSON.stringify(Array.isArray(memo.audioClips) ? memo.audioClips : []),
+          memo.is_public ? 1 : 0, // 🔧 添加is_public字段
           createdAt,
           updatedAt
         )
@@ -298,6 +301,7 @@ export class D1DatabaseService {
           tags TEXT DEFAULT '[]',
           backlinks TEXT DEFAULT '[]',
           audio_clips TEXT DEFAULT '[]',
+          is_public INTEGER DEFAULT 0,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )
