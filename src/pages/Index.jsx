@@ -1474,6 +1474,7 @@ import { toast } from 'sonner';
         setActiveTag={(tag) => { setActiveTag(tag); setActiveDate(null); }}
         onSettingsOpen={() => setIsSettingsOpen(true)}
         onDateClick={handleDateClick}
+        isAuthenticated={isAuthenticated}
   onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal((m) => ({ ...m, isOpen: true })); }}
       />
 
