@@ -14,9 +14,13 @@ Meow App 是一个简洁的笔记应用，支持本地存储和云端同步。�
 - 部分组件代码源于网络。
 
 ## demo
-不含D1数据库（麻烦帮我冲一下UV和PV，球球了）：https://flomo.nocode.host/
+
 含D1数据库：https://memo.oneloved.top/
 D1公共实例的登录密钥是：`meow`。请勿上传不良信息和个人信息。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=y-shi23/MeowNocode&type=Date)](https://www.star-history.com/#y-shi23/MeowNocode&Date)
 
 ## 本地开发
 ### 安装依赖
