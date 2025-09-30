@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX, SkipBack, SkipForward, ListMusic } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX, SkipBack, SkipForward, ListMusic, X } from 'lucide-react';
 import { useMusic } from '@/context/MusicContext';
 import MusicPlaylistDialog from './MusicPlaylistDialog';
 
@@ -20,6 +20,15 @@ export default function MiniMusicPlayer({
   const [showLyrics, setShowLyrics] = React.useState(false);
   const [currentLyricIndex, setCurrentLyricIndex] = React.useState(-1);
   const lyricsRef = React.useRef(null);
+  const [isHovered, setIsHovered] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('music:playerCollapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const {
     getCurrentSong,
@@ -313,6 +322,22 @@ export default function MiniMusicPlayer({
     } catch {}
   }, []);
 
+  // 处理关闭按钮点击
+  const handleCollapse = () => {
+    setIsCollapsed(true);
+    try {
+      localStorage.setItem('music:playerCollapsed', 'true');
+    } catch {}
+  };
+
+  // 处理展开
+  const handleExpand = () => {
+    setIsCollapsed(false);
+    try {
+      localStorage.setItem('music:playerCollapsed', 'false');
+    } catch {}
+  };
+
   // 如果没有当前歌曲，不显示播放器
   if (!currentSong) {
     return null;
@@ -320,7 +345,46 @@ export default function MiniMusicPlayer({
 
   return (
     <>
-      <div className="fixed bottom-4 right-4 z-40 w-96 max-w-[90vw] bg-white/90 dark:bg-gray-800/90 backdrop-blur border border-gray-200 dark:border-gray-700 shadow-lg rounded-xl overflow-visible sidebar-hover-block">
+      <div
+        className={`fixed bottom-4 right-4 z-40 transition-all duration-500 ease-in-out ${
+          isCollapsed
+            ? 'w-16 h-16 opacity-0 hover:opacity-100'
+            : 'w-96 max-w-[90vw] opacity-100'
+        } bg-white/90 dark:bg-gray-800/90 backdrop-blur border border-gray-200 dark:border-gray-700 shadow-lg rounded-xl overflow-visible sidebar-hover-block`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {isCollapsed ? (
+          // 折叠状态：显示小图标按钮
+          <div
+            className="w-full h-full flex items-center justify-center cursor-pointer group"
+            onClick={handleExpand}
+          >
+            <div className="relative">
+              <img
+                src={currentSong.coverUrl || '/images/default-music-cover.svg'}
+                alt={currentSong.title}
+                className="w-12 h-12 rounded-lg object-cover transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
+              />
+              {isPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          // 展开状态：显示完整播放器
+          <>
+            {/* 折叠按钮 - 左上角，部分在播放器外 */}
+            <button
+              className={`absolute -top-2 -left-2 z-50 p-1.5 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300 shadow-md ${
+                isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
+              }`}
+              onClick={handleCollapse}
+                          >
+              <X className="w-4 h-4" />
+            </button>
         {/* 透明歌词容器（位于迷你播放器上方） */}
   {showLyrics && lyrics.length > 0 && (
           <div className="absolute -top-2 right-0 -translate-y-full w-96 max-w-[90vw] bg-transparent rounded-xl p-2 z-[41]">
@@ -355,11 +419,11 @@ export default function MiniMusicPlayer({
         )}
 
         <div className="flex items-center p-3 gap-3">
-          <img 
-            src={currentSong.coverUrl || '/images/default-music-cover.svg'} 
-            alt={currentSong.title} 
-            className="w-12 h-12 rounded object-cover cursor-pointer" 
-            onClick={onOpenFull} 
+          <img
+            src={currentSong.coverUrl || '/images/default-music-cover.svg'}
+            alt={currentSong.title}
+            className="w-12 h-12 rounded object-cover cursor-pointer"
+            onClick={onOpenFull}
           />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium truncate cursor-pointer" onClick={onOpenFull}>
@@ -368,24 +432,14 @@ export default function MiniMusicPlayer({
             <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
               {currentSong.artist}
             </div>
-            <div className="mt-1 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500"
-                style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-              />
-            </div>
-            <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </div>
           </div>
-          
+
           <div className="flex items-center gap-1 relative">
             {/* 上一首按钮 */}
             <button
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
               onClick={playPrevious}
-              title="上一首"
-              disabled={playlist.length <= 1}
+                            disabled={playlist.length <= 1}
             >
               <SkipBack className="w-4 h-4" />
             </button>
@@ -394,8 +448,7 @@ export default function MiniMusicPlayer({
             <button
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
               onClick={togglePlay}
-              title={isPlaying ? '暂停' : '播放'}
-            >
+                          >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             </button>
 
@@ -403,8 +456,7 @@ export default function MiniMusicPlayer({
             <button
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
               onClick={playNext}
-              title="下一首"
-              disabled={playlist.length <= 1}
+                            disabled={playlist.length <= 1}
             >
               <SkipForward className="w-4 h-4" />
             </button>
@@ -416,8 +468,7 @@ export default function MiniMusicPlayer({
                 setIsLoop(v => !v);
                 if (audioRef.current) audioRef.current.loop = !isLoop;
               }}
-              title={isLoop ? '循环播放：开' : '循环播放：关'}
-            >
+                          >
               <RotateCcw className="w-4 h-4" />
             </button>
 
@@ -431,8 +482,7 @@ export default function MiniMusicPlayer({
                   return next;
                 });
               }}
-              title="显示/隐藏歌词"
-            >
+                          >
               词
             </button>
 
@@ -440,13 +490,12 @@ export default function MiniMusicPlayer({
             <button
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
               onClick={() => setShowPlaylist(true)}
-              title="播放列表"
-            >
+                          >
               <ListMusic className="w-4 h-4" />
             </button>
 
             {/* 音量控制 */}
-            <div className="relative" ref={volRef} title="音量">
+            <div className="relative" ref={volRef} >
               <button
                 className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
                 onClick={() => setVolOpen(o => !o)}
@@ -459,8 +508,7 @@ export default function MiniMusicPlayer({
                     <button
                       className="p-1 rounded bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
                       onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
-                      title={volume > 0 ? '静音' : '取消静音'}
-                    >
+                                          >
                       {volume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                     </button>
                     <div className="text-xs text-gray-600 dark:text-gray-300 select-none">{Math.round(volume * 100)}%</div>
@@ -478,14 +526,42 @@ export default function MiniMusicPlayer({
             </div>
           </div>
         </div>
-        <audio
-          ref={audioRef}
-          src={currentSong.musicUrl}
-          loop={isLoop}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          onEnded={handleSongEnd}
-        />
+
+        {/* 进度条和时间显示 */}
+        <div className="px-3 pb-3">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 min-w-[30px]">
+              {formatTime(currentTime)}
+            </span>
+            <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden cursor-pointer">
+              <div
+                className="h-full bg-blue-500 transition-all duration-100"
+                style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                onClick={(e) => {
+                  if (!audioRef.current || !duration) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const percent = (e.clientX - rect.left) / rect.width;
+                  const newTime = Math.max(0, Math.min(duration, percent * duration));
+                  audioRef.current.currentTime = newTime;
+                  setCurrentTime(newTime);
+                }}
+              />
+            </div>
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 min-w-[30px] text-right">
+              {formatTime(duration)}
+            </span>
+          </div>
+        </div>
+            <audio
+              ref={audioRef}
+              src={currentSong.musicUrl}
+              loop={isLoop}
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
+              onEnded={handleSongEnd}
+            />
+          </>
+        )}
       </div>
 
       {/* 播放列表弹窗 */}
