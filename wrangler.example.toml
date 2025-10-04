@@ -1,5 +1,5 @@
 # Cloudflare Workers 配置文件
-name = "meownocode" # 此处数据库名称改为你需要的名称，否则 wrangler d1 create xxx会报错
+name = "meow-app" # 此处数据库名称改为你需要的名称，否则 wrangler d1 create xxx会报错
 main = "worker.js"
 compatibility_date = "2023-12-01"
 
